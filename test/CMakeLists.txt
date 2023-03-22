@@ -157,6 +157,7 @@ list( APPEND ioda_test_input
   testinput/odb_radiance_name_map.yaml
   testinput/odb_sonde_name_map.yaml
   testinput/odb_surface_name_map.yaml
+  testinput/odb_surfacesst_name_map.yaml
   testinput/iodatest_time_io.yaml
 )
 
@@ -1656,7 +1657,7 @@ if (odc_FOUND)
                             "${CMAKE_BINARY_DIR}/bin/ioda-odc-converter.x
                             SurfaceSST
                             Data/testinput_tier_1/surfacesst.odb
-                            testinput/odb_default_name_map.yaml testinput/iodatest_odb_surfacesst.yaml"
+                            testinput/odb_surfacesst_name_map.yaml testinput/iodatest_odb_surfacesst.yaml"
                             test-SurfaceSST.hdf
                     TEST_DEPENDS get_ioda_test_data )
 
