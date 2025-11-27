@@ -151,7 +151,9 @@ ObsSpace::ObsSpace(const eckit::Configuration & config, const eckit::mpi::Comm &
 
     // Create an MPI distribution object
     const auto & distParams = obs_params_.top_level_.distribution.value().params.value();
+    oops::Log::debug() << "distParams: " << distParams << std::endl;
     dist_ = DistributionFactory::create(obs_params_.comm(), distParams);
+    oops::Log::debug() << "dist_: " << dist_ << std::endl;
 
     // Create a vector of obsdatain configs (one per input file) for the loop below
     std::vector<eckit::LocalConfiguration> obsDataInConfigs =

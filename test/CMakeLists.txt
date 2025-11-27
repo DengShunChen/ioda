@@ -374,6 +374,22 @@ ecbuild_add_test( TARGET  test_ioda_distribution_masterandreplica_io_pool_mpi_4
                                test_ioda_distribution_build_round_robin_mpi_4_file_set )
 
 #####################################################################
+# AllReduce Minloc tests
+#####################################################################
+
+ecbuild_add_test( TARGET  test_ioda_allreduce_minloc
+                  MPI     64
+                  SOURCES mains/TestAllReduceMinlocSimple.cc
+                  ARGS    "testinput/iodatest_allreduce_minloc.yaml"
+                  LIBS  ioda_test )
+
+ecbuild_add_test( TARGET  test_ioda_halo_minloc_stress
+                  MPI     64
+                  SOURCES mains/TestHaloMinlocStress.cc
+                  ARGS    "testinput/iodatest_allreduce_minloc.yaml"
+                  LIBS  ioda_test )
+
+#####################################################################
 # ioda engines tests
 #####################################################################
 
