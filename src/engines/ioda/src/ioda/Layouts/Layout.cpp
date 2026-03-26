@@ -24,10 +24,8 @@
 
 #include "ioda/config.h"
 
-#if (eckit_FOUND && oops_FOUND)
-#  define ENABLE_ODB_LAYOUT
-#  include "./Layout_ObsGroup_ODB.h"
-#endif
+#define ENABLE_ODB_LAYOUT
+#include "./Layout_ObsGroup_ODB.h"
 
 namespace ioda {
 namespace detail {
@@ -53,10 +51,10 @@ std::shared_ptr<const DataLayoutPolicy> DataLayoutPolicy::generate(
     const std::string &polid, const std::string &mapPath,
     const std::vector<std::string> &nonODBVariables) {
   std::string errorMessage;
-  if (polid != "ObsGroupODB")
+  if (polid != "ObsGroupODB") {
     errorMessage = "A mapping file is not relevant for the policy '" + polid + "'.";
-
     throw Exception(errorMessage.c_str(), ioda_Here());
+  }
 #ifdef ENABLE_ODB_LAYOUT
   return std::make_shared<DataLayoutPolicy_ObsGroup_ODB>(mapPath, nonODBVariables);
 #else

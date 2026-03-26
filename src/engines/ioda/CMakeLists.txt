@@ -12,36 +12,43 @@ list(APPEND SRCS_ATTRIBUTES
 	include/ioda/Attributes/Attribute.h
 	include/ioda/Attributes/Attribute_Creator.h
 	include/ioda/Attributes/Has_Attributes.h
+	include/ioda/Attributes/AttrUtils.h
 	include/ioda/Python/Att_ext.h
 	src/ioda/Attribute.cpp
 	src/ioda/Attribute_Creator.cpp
 	src/ioda/Has_Attributes.cpp
+	src/ioda/AttrUtils.cpp
 	)
 list(APPEND SRCS_C_BINDINGS
-	include/ioda/C/Attribute_c.h
-	include/ioda/C/c_binding_macros.h
-	include/ioda/C/Dimensions_c.h
-	include/ioda/C/Engines_c.h
-	include/ioda/C/Group_c.h
-	include/ioda/C/Has_Attributes_c.h
-	include/ioda/C/Has_Variables_c.h
-	include/ioda/C/ioda_c.h
-	include/ioda/C/String_c.h
-	include/ioda/C/Variable_c.h
-	include/ioda/C/Variable_Creation_Parameters_c.h
-	include/ioda/C/VecString_c.h
-	src/ioda/C/structs_c.h
-	#src/ioda/C/Attribute_c.cpp
-	#src/ioda/C/Dimensions_c.cpp
-	src/ioda/C/Engines_c.cpp
-	src/ioda/C/Group_c.cpp
-	#src/ioda/C/Has_Attributes_c.cpp
-	src/ioda/C/ioda_c.cpp
-	src/ioda/C/String_c.cpp
-	#src/ioda/C/Variable_Creation_Parameters_c.cpp
-	#src/ioda/C/Has_Variables_c.cpp
-	#src/ioda/C/Variable_c.cpp
-	src/ioda/C/VecString_c.cpp
+	include/ioda/C/cxx_string.hpp
+	include/ioda/C/cxx_vector_string.hpp
+	include/ioda/C/cxx_vector_int.hpp
+	include/ioda/C/cxx_vector_dbl.hpp
+	include/ioda/C/ioda_group_c.hpp
+	include/ioda/C/ioda_has_attributes_c.hpp
+	include/ioda/C/ioda_attribute_c.hpp
+	include/ioda/C/ioda_dimensions_c.hpp
+	include/ioda/C/ioda_decls.hpp
+	include/ioda/C/ioda_engines_c.hpp
+	include/ioda/C/ioda_group_c.hpp
+	include/ioda/C/ioda_has_attributes_c.hpp
+	include/ioda/C/ioda_has_variables_c.hpp
+	include/ioda/C/ioda_c_utils.hpp
+	include/ioda/C/ioda_variable_c.hpp
+	include/ioda/C/ioda_variable_creation_parameters_c.hpp
+	src/ioda/C/cxx_string.cpp
+	src/ioda/C/cxx_vector_string.cpp
+	src/ioda/C/cxx_vector_int.cpp
+	src/ioda/C/cxx_vector_dbl.cpp
+	src/ioda/C/ioda_c_utils.cpp
+	src/ioda/C/ioda_attribute_c.cpp
+	src/ioda/C/ioda_dimensions_c.cpp
+	src/ioda/C/ioda_engines_c.cpp
+	src/ioda/C/ioda_group_c.cpp
+	src/ioda/C/ioda_has_attributes_c.cpp
+	src/ioda/C/ioda_has_variables_c.cpp
+	src/ioda/C/ioda_variable_c.cpp
+	src/ioda/C/ioda_variable_creation_parameters_c.cpp
 	)
 list(APPEND SRCS_GROUPS
 	include/ioda/Group.h
@@ -49,15 +56,6 @@ list(APPEND SRCS_GROUPS
 	src/ioda/Group.cpp
 	src/ioda/ObsGroup.cpp
 	)
-list(APPEND SRCS_IO
-	include/ioda/Io/IoPool.h
-	include/ioda/Io/IoPoolParameters.h
-	include/ioda/Io/IoPoolUtils.h
-	include/ioda/Io/WriterUtils.h
-	src/ioda/IoPool.cpp
-	src/ioda/IoPoolUtils.cpp
-	src/ioda/WriterUtils.cpp
-        )
 list(APPEND SRCS_LAYOUTS
 	include/ioda/Layout.h
 	src/ioda/Layouts/Layout_ObsGroup.h
@@ -129,18 +127,24 @@ list(APPEND SRCS_ENGINES_TOP
 	include/ioda/Engines/ReaderBase.h
 	include/ioda/Engines/ReadH5File.h
 	include/ioda/Engines/ReadOdbFile.h
+	include/ioda/Engines/ReadBufrFile.h
+	include/ioda/Engines/ReaderFactory.h
 	include/ioda/Engines/WriterBase.h
 	include/ioda/Engines/WriteH5File.h
 	include/ioda/Engines/WriteOdbFile.h
+	include/ioda/Engines/WriterFactory.h
 	include/ioda/Engines/EngineUtils.h
 	src/ioda/Engines/GenList.cpp
 	src/ioda/Engines/GenRandom.cpp
 	src/ioda/Engines/ReaderBase.cpp
 	src/ioda/Engines/ReadH5File.cpp
 	src/ioda/Engines/ReadOdbFile.cpp
+	src/ioda/Engines/ReadBufrFile.cpp
+	src/ioda/Engines/ReaderFactory.cpp
 	src/ioda/Engines/WriterBase.cpp
 	src/ioda/Engines/WriteH5File.cpp
 	src/ioda/Engines/WriteOdbFile.cpp
+	src/ioda/Engines/WriterFactory.cpp
 	src/ioda/Engines/EngineUtils.cpp)
 
 list(APPEND SRCS_ENGINES_HH 
@@ -202,6 +206,7 @@ list(APPEND SRCS_ENGINES_ODC
 	include/ioda/Engines/ODC.h
 	src/ioda/Engines/ODC/ODC.cpp
 	)
+
 # Source files that should only be built when ODC is enabled
 list(APPEND SRCS_ENGINES_ODC_ODC_DEPENDENT
 	src/ioda/Engines/ODC/DataFromSQL.cpp
@@ -210,10 +215,26 @@ list(APPEND SRCS_ENGINES_ODC_ODC_DEPENDENT
 	src/ioda/Engines/ODC/OdbQueryParameters.cpp
 	)
 
+list(APPEND SRCS_ENGINES_BUFR
+		include/ioda/Engines/Bufr.h
+		src/ioda/Engines/Bufr/Bufr.cpp
+)
+
+list(APPEND SRCS_ENGINES_BUFR_DEPENDENT
+		include/ioda/Engines/Bufr/Encoder.h
+		src/ioda/Engines/Bufr/Encoder.cpp
+)
+
+list(APPEND SRCS_ENGINES_SCRIPT
+		include/ioda/Engines/ReadScriptFile.h
+		src/ioda/Engines/ReadScriptFile.cpp
+		include/ioda/Engines/Script.h
+		src/ioda/Engines/Script/Script.cpp
+)
+
 source_group("Attributes" FILES ${SRCS_ATTRIBUTES})
 source_group("C Bindings" FILES ${SRCS_C_BINDINGS})
 source_group("Groups" FILES ${SRCS_GROUPS})
-source_group("IO" FILES ${SRCS_IO})
 source_group("Layouts" FILES ${SRCS_LAYOUTS} ${SRCS_LAYOUTS_ODB})
 source_group("Math" FILES ${SRCS_MATH})
 source_group("Misc" FILES ${SRCS_MISC})
@@ -223,6 +244,11 @@ source_group("Engines" FILES ${SRCS_ENGINES_TOP})
 source_group("Engines\\HH" FILES ${SRCS_ENGINES_HH})
 source_group("Engines\\ObsStore" FILES ${SRCS_ENGINES_OBS_STORE})
 source_group("Engines\\ODC" FILES ${SRCS_ENGINES_ODC} ${SRCS_ENGINES_ODC_ODC_DEPENDENT})
+source_group("Engines\\Bufr" FILES ${SRCS_ENGINES_BUFR} ${SRCS_ENGINES_BUFR_DEPENDENT})
+
+if (BUILD_PYTHON_BINDINGS)
+	source_group("Engines\\Script" FILES ${SRCS_ENGINES_SCRIPT})
+endif()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/ioda/config.h.in
 	${CMAKE_CURRENT_BINARY_DIR}/config/ioda/config.h)
@@ -232,25 +258,41 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/ioda/testconfig.h.in
 ## Define which source files are compiled.
 
 list(APPEND SRCS_IODA_ENGINES
-	${SRCS_ATTRIBUTES} ${SRCS_C_BINDINGS} ${SRCS_GROUPS} ${SRCS_IO}
-	${SRCS_LAYOUTS} ${SRCS_MATH} ${SRCS_MISC} ${SRCS_TYPES} ${SRCS_VARIABLES}
-	${SRCS_ENGINES_TOP} ${SRCS_ENGINES_OBS_STORE} ${SRCS_ENGINES_ODC}
+	${SRCS_ATTRIBUTES}
+	${SRCS_C_BINDINGS}
+	${SRCS_GROUPS}
+	${SRCS_LAYOUTS}
+	${SRCS_MATH}
+	${SRCS_MISC}
+	${SRCS_TYPES}
+	${SRCS_VARIABLES}
+	${SRCS_ENGINES_TOP}
+	${SRCS_ENGINES_OBS_STORE}
+	${SRCS_ENGINES_ODC}
+	${SRCS_ENGINES_BUFR}
 	${CMAKE_CURRENT_BINARY_DIR}/config/ioda/config.h
 	${CMAKE_CURRENT_BINARY_DIR}/config/ioda/testconfig.h
 	)
-if (eckit_FOUND AND oops_FOUND)
-	list(APPEND SRCS_IODA_ENGINES ${SRCS_LAYOUTS_ODB})
-endif()
-if (odc_FOUND AND oops_FOUND AND eckit_FOUND)
+
+list(APPEND SRCS_IODA_ENGINES ${SRCS_LAYOUTS_ODB})
+if (odc_FOUND)
     list(APPEND SRCS_IODA_ENGINES ${SRCS_ENGINES_ODC_ODC_DEPENDENT})
 endif()
+
 if (HDF5_FOUND)
 	list(APPEND SRCS_IODA_ENGINES ${SRCS_ENGINES_HH})
 endif()
 
+if (bufr_query_FOUND)
+	list(APPEND SRCS_IODA_ENGINES ${SRCS_ENGINES_BUFR_DEPENDENT})
+endif()
+
+if (BUILD_PYTHON_BINDINGS)
+	list(APPEND SRCS_IODA_ENGINES ${SRCS_ENGINES_SCRIPT})
+endif()
+
 ## Create options files that specify compilation options, available libraries,
 ## and test file paths.
-
 
 ## Create the library
 
@@ -268,11 +310,13 @@ AddLib(ioda_engines SHARED ioda ${PROJECT_NAME}-targets)
 target_link_libraries(ioda_engines PUBLIC gsl::gsl-lite)
 target_link_libraries(ioda_engines PUBLIC Eigen3::Eigen)
 target_link_libraries(ioda_engines PUBLIC udunits::udunits)
+target_link_libraries(ioda_engines PUBLIC eckit)
 
-
-if (eckit_FOUND)
-	target_link_libraries(ioda_engines PUBLIC eckit)
+if(BUILD_PYTHON_BINDINGS)
+	target_link_libraries(ioda_engines PRIVATE Python3::Python pybind11::headers)
+	target_include_directories(ioda_engines PRIVATE ${Python3_INCLUDE_DIRS})
 endif()
+
 ### find_package(HDF5) may set only a subset of these. Options depend on how HDF5 was built.
 if(DEFINED HDF5_C_DEFINITIONS)
 	target_compile_options(ioda_engines PRIVATE "${HDF5_C_DEFINITIONS}")
@@ -293,10 +337,12 @@ endif()
 if (odc_FOUND)
 	target_link_libraries(ioda_engines PUBLIC odccore)
 endif()
-if (oops_FOUND)
-	target_link_libraries(ioda_engines PUBLIC oops)
+
+if (bufr_query_FOUND)
+	target_link_libraries(ioda_engines PUBLIC bufr_query)
 endif()
 
+target_link_libraries(ioda_engines PUBLIC oops)
 
 ## Include directories
 
@@ -313,6 +359,11 @@ target_include_directories(ioda_engines PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 	$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_INCLUDEDIR}>
 	)
+
+# Mark Boost as a system library to silence compiler warnings from Boost headers
+# Ditto for Eigen
+target_include_directories( ioda_engines SYSTEM PUBLIC ${Boost_INCLUDE_DIRS} )
+target_include_directories( ioda_engines SYSTEM PUBLIC ${EIGEN3_INCLUDE_DIRS} )
 
 INSTALL(DIRECTORY include/ioda
 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}

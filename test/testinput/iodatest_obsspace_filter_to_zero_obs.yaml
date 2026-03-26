@@ -1,20 +1,23 @@
 ---
-window begin: "2010-04-14T21:00:00Z" # filters out all obs
-window end: "2010-04-15T03:00:00Z"
+time window:
+  begin: "2010-04-14T21:00:00Z" # filters out all obs
+  end: "2010-04-15T03:00:00Z"
 
 observations:
 - obs space:
     name: "AMSUA NOAA19"
-    simulated variables: ['brightness_temperature']
+    simulated variables: ['brightnessTemperature']
     channels: 1-15
     obsdatain:
       engine:
         type: H5File
         obsfile: "Data/testinput_tier_1/amsua_n19_obs_2018041500_m.nc4"
   test data:
-    nlocs: 0
+    gnlocs: 0
+    gnlocs outside time window: 100
+    gnlocs rejected by qc: 0
+    nlocs from source: 100
     nrecs: 0
-    nvars: 1
     obs perturbations seed: 0
     expected group variables: []
     expected sort variable: ""
@@ -33,25 +36,27 @@ observations:
       - 1.0e-11
     variables for putget test:
       # have to use float variables, and only one channel at a time
-      - name: "brightness_temperature"
+      - name: "brightnessTemperature"
         group: "ObsValue"
         channels: [ 4 ]
 
-      - name: "brightness_temperature"
+      - name: "brightnessTemperature"
         group: "ObsValue"
         channels: [ 11 ]
 
 - obs space:
     name: "Radiosonde"
-    simulated variables: ['air_temperature']
+    simulated variables: ['airTemperature']
     obsdatain:
       engine:
         type: H5File
         obsfile: "Data/testinput_tier_1/sondes_obs_2018041500_m.nc4"
   test data:
-    nlocs: 0
+    gnlocs: 0
+    gnlocs outside time window: 974
+    gnlocs rejected by qc: 0
+    nlocs from source: 974
     nrecs: 0
-    nvars: 5
     obs perturbations seed: 0
     expected group variables: []
     expected sort variable: ""
@@ -67,17 +72,17 @@ observations:
         type: "float"
         norm: 0.0
 
-      - name: "surface_pressure"
+      - name: "stationPressure"
         group: "PreQC"
         type: "integer"
         norm: 0
     tolerance:
       - 1.0e-11
     variables for putget test:
-      - name: "air_temperature"
+      - name: "airTemperature"
         group: "ObsValue"
         channels: []
 
-      - name: "specific_humidity"
+      - name: "specificHumidity"
         group: "ObsValue"
         channels: []

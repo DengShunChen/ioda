@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "ioda/Engines/ReaderBase.h"
+#include "ioda/Engines/ReaderFactory.h"
 
 namespace ioda {
 namespace Engines {
@@ -33,11 +34,24 @@ class GenListParameters : public ReaderParametersBase {
     /// \brief time offsets (s) relative to epoch
     oops::RequiredParameter<std::vector<int64_t>> dateTimes{"dateTimes", this};
 
+    /// \brief control parameter for which vertical coordinate to use
+    oops::OptionalParameter<std::string> vcoordType{"vert coord type", this};
+
+    /// \brief vertical coordinate values
+    oops::OptionalParameter<std::vector<float>> vcoordVals{"vert coords", this};
+
     /// \brief epoch (ISO 8601 string) relative to which datetimes are computed
     oops::Parameter<std::string> epoch{"epoch", "seconds since 1970-01-01T00:00:00Z", this};
 
+    /// \brief obs values
+    oops::Parameter<std::vector<float>> obsValues{"obs values", { }, this};
+
     /// \brief obs error estimates
     oops::Parameter<std::vector<float>> obsErrors{"obs errors", { }, this};
+
+    bool isFileBackend() const override { return false; }
+
+    std::string getFileName() const override { return std::string(""); }
 };
 
 // Classes
@@ -47,9 +61,7 @@ class GenList: public ReaderBase {
   typedef GenListParameters Parameters_;
 
   // Constructor via parameters
-  GenList(const Parameters_ & params, const util::DateTime & winStart,
-          const util::DateTime & winEnd, const eckit::mpi::Comm & comm,
-          const eckit::mpi::Comm & timeComm, const std::vector<std::string> & obsVarNames);
+  GenList(const Parameters_ & params, const ReaderCreationParameters & createParams);
 
   bool applyLocationsCheck() const override { return false; }
 
@@ -63,6 +75,7 @@ class GenList: public ReaderBase {
   /// \param params Parameters structure specific to the generate list method
   void genDistList(const Parameters_ & params);
 
+  std::string fileName() const override;
   void print(std::ostream & os) const override;
 };
 

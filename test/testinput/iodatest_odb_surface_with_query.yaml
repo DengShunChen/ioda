@@ -9,15 +9,22 @@ variables:
 - name: hours_since_last_position
 - name: ident
 - name: initial_obsvalue
+- name: lat
+- name: lon
 - name: ob_practice
-- name: position_accuracy_flag
+- name: ops_subtype
 - name: pressure_sensor_alt
-- name: present_weather_type
-- name: sst_measurement_method
 - name: stalt
+- name: statid
 - name: station_type
 - name: wmo_block_number
 - name: wmo_region_number
 - name: wmo_station_number
 - name: receipt_time
 - name: receipt_date
+- name: date
+- name: time
+- name: ops_obsgroup
+- name: varno
+- name: seqno
+construct station ID: true

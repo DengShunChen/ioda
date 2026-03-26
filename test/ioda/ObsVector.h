@@ -11,6 +11,7 @@
 #ifndef TEST_IODA_OBSVECTOR_H_
 #define TEST_IODA_OBSVECTOR_H_
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -58,18 +59,16 @@ class ObsVecTestFixture : private boost::noncopyable {
   }
 
   ObsVecTestFixture(): ospaces_() {
-    util::DateTime bgn((::test::TestEnvironment::config().getString("window begin")));
-    util::DateTime end((::test::TestEnvironment::config().getString("window end")));
+    const util::TimeWindow timeWindow
+      (::test::TestEnvironment::config().getSubConfiguration("time window"));
 
     std::vector<eckit::LocalConfiguration> conf;
     ::test::TestEnvironment::config().get("observations", conf);
 
     for (std::size_t jj = 0; jj < conf.size(); ++jj) {
       eckit::LocalConfiguration obsconf(conf[jj], "obs space");
-      ioda::ObsTopLevelParameters obsparams;
-      obsparams.validateAndDeserialize(obsconf);
-      boost::shared_ptr<ObsSpace_> tmp(new ObsSpace_(obsparams, oops::mpi::world(),
-                                                     bgn, end, oops::mpi::myself()));
+      boost::shared_ptr<ObsSpace_> tmp(new ObsSpace_(obsconf, oops::mpi::world(),
+                                                     timeWindow, oops::mpi::myself()));
       ospaces_.push_back(tmp);
     }
   }
@@ -207,20 +206,26 @@ void testAxpy() {
 
   for (std::size_t jj = 0; jj < Test_::obspace().size(); ++jj) {
     ioda::ObsSpace & obspace = *Test_::obspace()[jj];
+    const std::size_t nrecs = obspace.nrecs();
     ObsVector_ vec1(obspace);
     vec1.random();
 
-    // call axpy with coefficient 2.0 two different ways
+    // call axpy with coefficient 2.0 in three different ways
     ObsVector_ vec2(vec1);
     vec2.axpy(2.0, vec1);
     ObsVector_ vec3(vec1);
     std::vector<double> beta_a(obspace.assimvariables().size(), 2.0);
     vec3.axpy(beta_a, vec1);
-    oops::Log::test() << "Testing ObsVector::axpy" << std::endl;
-    oops::Log::test() << "x = " << vec1 << std::endl;
-    oops::Log::test() << "x.axpy(2, x) = " << vec2 << std::endl;
-    oops::Log::test() << "x.axpy(vector of 2, x) = " << vec3 << std::endl;
+    ObsVector_ vec4(vec1);
+    std::vector<double> beta_b(nrecs * obspace.assimvariables().size(), 2.0);
+    vec4.axpy_byrecord(beta_b, vec1);
+    oops::Log::info() << "Testing ObsVector::axpy" << std::endl;
+    oops::Log::info() << "x = " << vec1 << std::endl;
+    oops::Log::info() << "x.axpy(2, x) = " << vec2 << std::endl;
+    oops::Log::info() << "x.axpy(vector of 2, x) = " << vec3 << std::endl;
     EXPECT(oops::is_close(vec2.rms(), vec3.rms(), 1.0e-8));
+    oops::Log::info() << "x.axpy_byrecord(vector of 2, x) = " << vec4 << std::endl;
+    EXPECT(oops::is_close(vec2.rms(), vec4.rms(), 1.0e-8));
 
     // call axpy with vector of different values
     std::vector<double> beta1(obspace.assimvariables().size());
@@ -229,26 +234,41 @@ void testAxpy() {
       beta1[jj] = static_cast<double>(jj)/beta1.size();
       beta2[jj] = 2.0 - beta1[jj];
     }
-    oops::Log::test() << "beta1 = " << beta1 << ", beta2 = " << beta2 << std::endl;
-    ObsVector_ vec4(vec1);
-    vec4.axpy(beta1, vec1);
-    oops::Log::test() << "x.axpy(beta1, x) = " << vec4 << std::endl;
-    vec4.axpy(beta2, vec1);
-    oops::Log::test() << "x.axpy(beta2, x) = " << vec4 << std::endl;
-    EXPECT(oops::is_close(vec4.rms(), vec3.rms(), 1.0e-8));
+    oops::Log::info() << "beta1 = " << beta1 << ", beta2 = " << beta2 << std::endl;
+    ObsVector_ vec5(vec1);
+    vec5.axpy(beta1, vec1);
+    oops::Log::info() << "x.axpy(beta1, x) = " << vec5 << std::endl;
+    vec5.axpy(beta2, vec1);
+    oops::Log::info() << "x.axpy(beta2, x) = " << vec5 << std::endl;
+    EXPECT(oops::is_close(vec5.rms(), vec3.rms(), 1.0e-8));
+
+    std::vector<double> beta1_rec(nrecs * obspace.assimvariables().size());
+    std::vector<double> beta2_rec(nrecs * obspace.assimvariables().size());
+    for (size_t jj = 0; jj < beta1_rec.size(); ++jj) {
+      beta1_rec[jj] = static_cast<double>(jj)/beta1_rec.size();
+      beta2_rec[jj] = 2.0 - beta1_rec[jj];
+    }
+    oops::Log::info() << "beta1 = " << beta1_rec << ", beta2 = " << beta2_rec << std::endl;
+    ObsVector_ vec6(vec1);
+    vec6.axpy_byrecord(beta1_rec, vec1);
+    oops::Log::info() << "x.axpy_byrecord(beta1, x) = " << vec6 << std::endl;
+    vec6.axpy_byrecord(beta2_rec, vec1);
+    oops::Log::info() << "x.axpy_byrecord(beta2, x) = " << vec6 << std::endl;
+    EXPECT(oops::is_close(vec6.rms(), vec4.rms(), 1.0e-8));
   }
 }
 
 /// \brief tests ObsVector::dot_product methods
 /// \details Tests the following for a random vector vec1:
-/// 1. Calling ObsVector::dot_product and calling ObsVector::multivar_dot_product
-///    are consistent.
+/// 1. Calling ObsVector::dot_product and calling both versions of
+///    ObsVector::multivar_dot_product_with are consistent.
 void testDotProduct() {
   typedef ObsVecTestFixture Test_;
   typedef ioda::ObsVector  ObsVector_;
 
   for (std::size_t jj = 0; jj < Test_::obspace().size(); ++jj) {
     ioda::ObsSpace & obspace = *Test_::obspace()[jj];
+    const std::size_t nrecs = obspace.nrecs();
     ObsVector_ vec1(obspace);
     vec1.random();
     ObsVector_ vec2(obspace);
@@ -256,17 +276,26 @@ void testDotProduct() {
 
     double dp1 = vec1.dot_product_with(vec2);
     std::vector<double> dp2 = vec1.multivar_dot_product_with(vec2);
-    oops::Log::test() << "Testing ObsVector::dot_product" << std::endl;
-    oops::Log::test() << "x1 = " << vec1 << std::endl;
-    oops::Log::test() << "x2 = " << vec2 << std::endl;
-    oops::Log::test() << "x1.dot_product_with(x2) = " << dp1 << std::endl;
-    oops::Log::test() << "x1.multivar_dot_product_with(x2) = " << dp2 << std::endl;
+    std::vector<double> dp3 = vec1.multivarrec_dot_product_with(vec2);
+
+    oops::Log::info() << "Testing ObsVector::dot_product" << std::endl;
+    oops::Log::info() << "x1 = " << vec1 << std::endl;
+    oops::Log::info() << "x2 = " << vec2 << std::endl;
+    oops::Log::info() << "x1.dot_product_with(x2) = " << dp1 << std::endl;
+    oops::Log::info() << "x1.multivar_dot_product_with(x2) = " << dp2 << std::endl;
+    oops::Log::info() << "x1.multivarrec_dot_product_with(x2) = " << dp3 << std::endl;
 
     // test that size of vector returned by multivar dot product is correct
     EXPECT_EQUAL(dp2.size(), vec1.nvars());
+    EXPECT_EQUAL(dp3.size(), nrecs * vec1.nvars());
     // test that dot products are consistent (sum of all elements in multivar one
     // is the same as the scalar one)
     EXPECT(oops::is_close(dp1, std::accumulate(dp2.begin(), dp2.end(), 0.0), 1.0e-12));
+    // accumulate dot product across all tasks, since different tasks contain
+    // dot products for different records
+    double dp3_sum = std::accumulate(dp3.begin(), dp3.end(), 0.0);
+    obspace.comm().allReduceInPlace(dp3_sum, eckit::mpi::sum());
+    EXPECT(oops::is_close(dp1, dp3_sum, 1.0e-12));
   }
 }
 
@@ -289,8 +318,8 @@ void testDistributedMath() {
   }
 
   // Get some config information that is the same regardless of distribution
-  util::DateTime bgn((::test::TestEnvironment::config().getString("window begin")));
-  util::DateTime end((::test::TestEnvironment::config().getString("window end")));
+  const util::TimeWindow timeWindow
+    (::test::TestEnvironment::config().getSubConfiguration("time window"));
   std::vector<eckit::LocalConfiguration> conf;
   ::test::TestEnvironment::config().get("observations", conf);
 
@@ -336,12 +365,9 @@ void testDistributedMath() {
            obsconf.set("obsdataout.obsfile", fileName);
        }
 
-       ioda::ObsTopLevelParameters obsparams;
-       obsparams.validateAndDeserialize(obsconf);
-
        // Instantiate the obs space with the distribution we are testing
-       std::shared_ptr<ObsSpace_> obsdb(new ObsSpace(obsparams, oops::mpi::world(),
-                                                     bgn, end, oops::mpi::myself()));
+       std::shared_ptr<ObsSpace_> obsdb(new ObsSpace(obsconf, oops::mpi::world(),
+                                                     timeWindow, oops::mpi::myself()));
        std::shared_ptr<ObsVector_> obsvec(new ObsVector_(*obsdb, "ObsValue"));
        oops::Log::debug() << dist_names[dd] << ": " << *obsvec << std::endl;
        dist_obsdbs.push_back(obsdb);
@@ -367,6 +393,88 @@ void testDistributedMath() {
       EXPECT(nobs == nobs2);
       EXPECT(oops::is_close(rms, rms2, 1.0e-12));
       EXPECT(oops::is_close(dot, dot2, 1.0e-12));
+    }
+  }
+}
+
+
+// -----------------------------------------------------------------------------
+/// \brief tests ObsVector::random method with different MPI distributions
+/// \details for distributions where all obs are on all PEs, verifies that the same
+/// perturbations are found on all PEs. For distributions where this is not the case,
+/// checks that the sequence of perturbations on each PE is unique
+void testRandom() {
+  typedef ioda::ObsVector  ObsVector_;
+  typedef ioda::ObsSpace  ObsSpace_;
+
+  // get the list of distributions to test with
+  std::vector<std::string> dist_names =
+    ::test::TestEnvironment::config().getStringVector("distributions");
+  for (std::size_t ii = 0; ii < dist_names.size(); ++ii) {
+    oops::Log::debug() << "using distribution: " << dist_names[ii] << std::endl;
+  }
+
+  // Get some config information that is the same regardless of distribution
+  const util::TimeWindow timeWindow
+    (::test::TestEnvironment::config().getSubConfiguration("time window"));
+
+  std::vector<eckit::LocalConfiguration> conf;
+  ::test::TestEnvironment::config().get("observations", conf);
+
+  // for each distribution, create the set of obs vectors
+  for (std::size_t dd = 0; dd < dist_names.size(); ++dd) {
+    for (std::size_t jj = 0; jj < conf.size(); ++jj) {
+      eckit::LocalConfiguration obsconf(conf[jj], "obs space");
+      obsconf.set("distribution.name", dist_names[dd]);
+      // "halo size" is a required parameter and needs to be set if Halo distribution is used
+      // "radius" is defined to be smaller than the default value so not all obs are on all PEs
+      if (dist_names[dd] == "Halo") {
+        obsconf.set("distribution.halo size", 0);
+        obsconf.set("distribution.radius", 5000000.0);
+      }
+      if (obsconf.has("obsdataout.obsfile")) {
+        std::string fileName = obsconf.getString("obsdataout.obsfile");
+        std::string fileTag = std::string("_Dist_") + dist_names[dd];
+        std::size_t pos = fileName.find_last_of(".");
+        if (pos != std::string::npos) {
+          // have a suffix on the file name, insert tag before the suffix
+          fileName.insert(pos, fileTag);
+         } else {
+            // do not have a suffix on the file name, append tag to end of file name
+            fileName += fileTag;
+         }
+        obsconf.set("obsdataout.obsfile", fileName);
+      }
+
+      // Instantiate the obs space with the distribution we are testing
+      ObsSpace_ obsdb(obsconf, oops::mpi::world(), timeWindow, oops::mpi::myself());
+      ObsVector_ ov(obsdb);
+
+      ov.random();
+
+      bool myChecksPass = true;
+      for (std::size_t jrank = 0; jrank < ov.space().comm().size(); ++jrank) {
+        std::vector<double> pertvec = ov.data();
+        std::sort(pertvec.begin(), pertvec.end());
+        std::size_t jsize = ov.size();
+        ov.space().comm().broadcast(jsize, jrank);
+        std::vector<double> refvec(jsize);
+        if (ov.space().comm().rank() == jrank) {
+          refvec = pertvec;
+        }
+        ov.space().comm().broadcast(refvec, jrank);
+        if (ov.space().distribution()->isIdentity() || ov.space().comm().rank() == jrank) {
+            myChecksPass = myChecksPass && (pertvec == refvec);
+        } else {
+            // Don't do this check if both pertvec and refvec are empty. This situation
+            // can occur if two ranks get zero obs in their obs spaces, and this check
+            // will fail since the two empty vectors will match.
+            if (!pertvec.empty() || !refvec.empty()) {
+                myChecksPass = myChecksPass && (pertvec != refvec);
+            }
+        }
+      }
+      EXPECT(myChecksPass);
     }
   }
 }
@@ -410,6 +518,8 @@ class ObsVector : public oops::Test {
       { testDotProduct(); });
      ts.emplace_back(CASE("ioda/ObsVector/testDistributedMath")
       { testDistributedMath(); });
+     ts.emplace_back(CASE("ioda/ObsVector/testRandom")
+      { testRandom(); });
      ts.emplace_back(CASE("ioda/ObsVector/testCleanup")
       { testCleanup(); });
   }

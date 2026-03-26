@@ -18,13 +18,13 @@
 #include "eckit/config/LocalConfiguration.h"
 #include "eckit/testing/Test.h"
 
+#include "ioda/Engines/EngineUtils.h"
+#include "ioda/Engines/HH.h"
+#include "ioda/ObsSpace.h"
+
 #include "oops/mpi/mpi.h"
 #include "oops/runs/Test.h"
 #include "oops/test/TestEnvironment.h"
-
-#include "ioda/Engines/HH.h"
-#include "ioda/Io/IoPoolUtils.h"
-#include "ioda/ObsSpace.h"
 
 namespace ioda {
 namespace test {
@@ -35,16 +35,13 @@ CASE("ioda/ObsSpace/testPutDb") {
 
   const auto &topLevelConf = ::test::TestEnvironment::config();
 
-  util::DateTime bgn(topLevelConf.getString("window begin"));
-  util::DateTime end(topLevelConf.getString("window end"));
+  const util::TimeWindow timeWindow(topLevelConf.getSubConfiguration("time window"));
 
   std::vector<eckit::LocalConfiguration> confs;
   topLevelConf.get("observations", confs);
 
   for (const eckit::LocalConfiguration & conf : confs) {
     eckit::LocalConfiguration obsconf(conf, "obs space");
-    ioda::ObsTopLevelParameters obsparams;
-    obsparams.validateAndDeserialize(obsconf);
 
     eckit::LocalConfiguration testconf(conf, "test data");
     bool createFile = testconf.getBool("create file", true);
@@ -56,7 +53,7 @@ CASE("ioda/ObsSpace/testPutDb") {
       // test with createFile set to false
 
       std::unique_ptr<ObsSpace> obsspace = boost::make_unique<ObsSpace>(
-            obsparams, oops::mpi::world(), bgn, end, oops::mpi::myself());
+            obsconf, oops::mpi::world(), timeWindow, oops::mpi::myself());
 
       const Dimensions_t nlocs = obsspace->nlocs();
       const Dimensions_t nchans = obsspace->nchans();
@@ -84,25 +81,24 @@ CASE("ioda/ObsSpace/testPutDb") {
       obsspace->save();
     } else {
       // Read the output file and check that its contents are correct
-      const std::string fileName =
-          uniquifyFileName(obsconf.getString("obsdataout.engine.obsfile"), 0, -1);
+      const std::string fileName = obsconf.getString("obsdataout.engine.obsfile");
       const ioda::Group group = ioda::Engines::HH::openFile(
             fileName, ioda::Engines::BackendOpenModes::Read_Only);
 
-      const Variable nlocsVar = group.vars.open("nlocs");
-      const Dimensions_t nlocs = nlocsVar.getDimensions().dimsCur[0];
+      const Variable LocationVar = group.vars.open("Location");
+      const Dimensions_t nlocs = LocationVar.getDimensions().dimsCur[0];
       EXPECT_EQUAL(nlocs, expectedNlocs);
 
       std::vector<float> testVec1(nlocs), testVec2(nlocs);
       std::iota(testVec1.begin(), testVec1.end(), testVec1Start);
       std::iota(testVec2.begin(), testVec2.end(), testVec2Start);
 
-      if (group.vars.exists("nchans")) {
-        const Variable nchansVar = group.vars.open("nchans");
-        const Dimensions_t nchans = nchansVar.getDimensions().dimsCur[0];
+      if (group.vars.exists("Channel")) {
+        const Variable ChannelVar = group.vars.open("Channel");
+        const Dimensions_t nchans = ChannelVar.getDimensions().dimsCur[0];
         EXPECT_EQUAL(nchans, expectedNchans);
 
-        const std::vector<int> channels = nchansVar.readAsVector<int>();
+        const std::vector<int> channels = ChannelVar.readAsVector<int>();
         const std::size_t channel2Index =
             std::find(channels.begin(), channels.end(), 2) - channels.begin();
         const std::size_t channel4Index =
@@ -118,11 +114,11 @@ CASE("ioda/ObsSpace/testPutDb") {
           Eigen::ArrayXXf values;
           var.readWithEigenRegular(values);
           std::vector<float> channelValues(nlocs);
-          for (std::size_t loc = 0; loc < nlocs; ++loc)
+          for (int loc = 0; loc < nlocs; ++loc)
             channelValues[loc] = values(loc, channel2Index);
           EXPECT_EQUAL(channelValues, testVec1);
 
-          for (std::size_t loc = 0; loc < nlocs; ++loc)
+          for (int loc = 0; loc < nlocs; ++loc)
             channelValues[loc] = values(loc, channel4Index);
           EXPECT_EQUAL(channelValues, testVec2);
         }

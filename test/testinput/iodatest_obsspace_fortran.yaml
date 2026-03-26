@@ -1,21 +1,21 @@
 ---
-window begin: 2018-04-14T21:00:00Z
-window end: 2018-04-15T03:00:00Z
+time window:
+  begin: 2018-04-14T21:00:00Z
+  end: 2018-04-15T03:00:00Z
 observations:
 - obs space:
     name: Radiosonde
-    simulated variables: [air_temperature, eastward_wind, northward_wind]
+    simulated variables: [airTemperature, windEastward, windNorthward]
     obsdatain:
       engine:
         type: H5File
         obsfile: Data/testinput_tier_1/sondes_obs_2018041500_m.nc4
   test data:
     nlocs: 974
-    nvars: 5
     nvars obsvars: 3
 - obs space:
     name: Radiance
-    simulated variables: [brightness_temperature]
+    simulated variables: [brightnessTemperature]
     channels: 1-10, 15
     obsdatain:
       engine:
@@ -23,5 +23,4 @@ observations:
         obsfile: Data/testinput_tier_1/amsua_n19_obs_2018041500_m.nc4
   test data:
     nlocs: 100
-    nvars: 1
     nvars obsvars: 11

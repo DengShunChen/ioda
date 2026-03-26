@@ -1,0 +1,18 @@
+---
+construct config tests:
+    - case:
+        name: "HDF5 file"
+        file type: "hdf5"
+        file name: "test_obs_file.nc4"
+
+construct file reader tests:
+    - case:
+        name: "HDF5 file"
+        file type: "hdf5"
+        file name: "Data/testinput_tier_1/sondes_obs_2018041500_m.nc4"
+
+construct file writer tests:
+    - case:
+        name: "HDF5 file"
+        file type: "hdf5"
+        file name: "testoutput/engine_construct_file_writer.nc4"

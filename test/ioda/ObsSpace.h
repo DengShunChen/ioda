@@ -66,17 +66,15 @@ class ObsSpaceTestFixture : private boost::noncopyable {
   }
 
   ObsSpaceTestFixture(): ospaces_() {
-    util::DateTime bgn(::test::TestEnvironment::config().getString("window begin"));
-    util::DateTime end(::test::TestEnvironment::config().getString("window end"));
+    const util::TimeWindow timeWindow
+      (::test::TestEnvironment::config().getSubConfiguration("time window"));
 
     ::test::TestEnvironment::config().get("observations", configs_);
 
     for (std::size_t jj = 0; jj < configs_.size(); ++jj) {
       eckit::LocalConfiguration obsconf(configs_[jj], "obs space");
-      ioda::ObsTopLevelParameters obsparams;
-      obsparams.validateAndDeserialize(obsconf);
-      boost::shared_ptr<ioda::ObsSpace> tmp(new ioda::ObsSpace(obsparams, oops::mpi::world(),
-                                                               bgn, end, oops::mpi::myself()));
+      boost::shared_ptr<ioda::ObsSpace> tmp(new ioda::ObsSpace(obsconf, oops::mpi::world(),
+                                                               timeWindow, oops::mpi::myself()));
       ospaces_.push_back(tmp);
     }
   }
@@ -102,17 +100,37 @@ void testConstructor() {
 
     const ObsSpace &odb = Test_::obspace(jj);
 
-    // Get the numbers of locations (nlocs) from the ObsSpace object
+    // Get the global numbers of locations and vars from the ObsSpace object
+    // These values are not expected to change whether running with a single process
+    // or multiple MPI tasks. There are other tests that check local stats according to
+    // the MPI distribution.
     std::size_t GlobalNlocs = odb.globalNumLocs();
-    std::size_t Nlocs = odb.nlocs();
-    std::size_t Nvars = odb.nvars();
+    std::size_t GlobalNlocsOutsideTimeWindow = odb.globalNumLocsOutsideTimeWindow();
+    std::size_t GlobalNlocsRejectQC = odb.globalNumLocsRejectQC();
+    std::size_t SourceNlocs = odb.sourceNumLocs();
 
     // Get the purturbation seed from the ObsSpace object
     int obsPertSeed = odb.params().obsPertSeed();
 
-    // Get the expected nlocs from the obspace object's configuration
-    std::size_t ExpectedGlobalNlocs = testConfig.getUnsigned("nlocs");
-    std::size_t ExpectedNvars = testConfig.getUnsigned("nvars");
+    // Get the expected global nlocs values from the obspace object's configuration
+    std::size_t ExpectedGlobalNlocs = testConfig.getUnsigned("gnlocs");
+    std::size_t ExpectedGlobalNlocsOutsideTimeWindow =
+        testConfig.getUnsigned("gnlocs outside time window");
+    std::size_t ExpectedGlobalNlocsRejectQC =
+        testConfig.getUnsigned("gnlocs rejected by qc");
+    std::size_t ExpectedSourceNlocs =
+        testConfig.getUnsigned("nlocs from source");
+
+    oops::Log::debug() << "GlobalNlocs, ExpectedGlobalNlocs: " << GlobalNlocs << ", "
+                       << ExpectedGlobalNlocs << std::endl;
+    oops::Log::debug() << "GlobalNlocsOutsideTimeWindow, ExpectedGlobalNlocsOutsideTimeWindow: "
+                       << GlobalNlocsOutsideTimeWindow << ", "
+                       << ExpectedGlobalNlocsOutsideTimeWindow << std::endl;
+    oops::Log::debug() << "GlobalNlocsRejectQC, ExpectedGlobalNlocsRejectQC: "
+                       << GlobalNlocsRejectQC << ", "
+                       << ExpectedGlobalNlocsRejectQC << std::endl;
+    oops::Log::debug() << "SourceNlocs, ExpectedSourceNlocs: " << SourceNlocs << ", "
+                       << ExpectedSourceNlocs << std::endl;
 
     // Get the expected purturbation seed from the config object
     int ExpectedObsPertSeed = testConfig.getUnsigned("obs perturbations seed");
@@ -128,19 +146,16 @@ void testConstructor() {
     std::string ExpectedObsSortVar = testConfig.getString("expected sort variable");
     std::string ExpectedObsSortOrder = testConfig.getString("expected sort order");
 
-    oops::Log::debug() << "GlobalNlocs, ExpectedGlobalNlocs: " << GlobalNlocs << ", "
-                       << ExpectedGlobalNlocs << std::endl;
-    oops::Log::debug() << "Nvars, ExpectedNvars: " << Nvars << ", "
-                       << ExpectedNvars << std::endl;
     // records are ambigious for halo distribution
     // e.g. consider airplane (a single record in round robin) flying accros the globe
     // for Halo distr this record will be considered unique on each PE
     if (odb.distribution()->name() != "Halo") {
+      std::size_t Nlocs = odb.nlocs();
       std::size_t NRecs = 0;
       std::set<std::size_t> recIndices;
       auto accumulator = odb.distribution()->createAccumulator<std::size_t>();
       for (std::size_t loc = 0; loc < Nlocs; ++loc) {
-        if (bool isNewRecord = recIndices.insert(odb.recnum()[loc]).second) {
+        if (recIndices.insert(odb.recnum()[loc]).second) {
           accumulator->addTerm(loc, 1);
           ++NRecs;
         }
@@ -162,23 +177,27 @@ void testConstructor() {
                        << ExpectedObsSortOrder << std::endl;
 
     // get the standard nlocs and nchans dimension names and compare with expected values
-    std::string nlocsName = odb.get_dim_name(ioda::ObsDimensionId::Nlocs);
-    std::string nchansName = odb.get_dim_name(ioda::ObsDimensionId::Nchans);
+    std::string LocationName = odb.get_dim_name(ioda::ObsDimensionId::Location);
+    std::string ChannelName = odb.get_dim_name(ioda::ObsDimensionId::Channel);
 
     EXPECT(GlobalNlocs == ExpectedGlobalNlocs);
-    EXPECT(Nvars == ExpectedNvars);
+    EXPECT(GlobalNlocsOutsideTimeWindow == ExpectedGlobalNlocsOutsideTimeWindow);
+    EXPECT(GlobalNlocsRejectQC == ExpectedGlobalNlocsRejectQC);
+    EXPECT(SourceNlocs == ExpectedSourceNlocs);
 
     EXPECT(obsPertSeed == ExpectedObsPertSeed);
+
+    EXPECT(odb.empty() == (ExpectedSourceNlocs == 0));
 
     EXPECT(ObsGroupVars == ExpectedObsGroupVars);
     EXPECT(ObsSortVar == ExpectedObsSortVar);
     EXPECT(ObsSortOrder == ExpectedObsSortOrder);
 
-    EXPECT(nlocsName == "nlocs");
-    EXPECT(nchansName == "nchans");
+    EXPECT(LocationName == "Location");
+    EXPECT(ChannelName == "Channel");
 
-    EXPECT(odb.get_dim_id("nlocs") == ioda::ObsDimensionId::Nlocs);
-    EXPECT(odb.get_dim_id("nchans") == ioda::ObsDimensionId::Nchans);
+    EXPECT(odb.get_dim_id("Location") == ioda::ObsDimensionId::Location);
+    EXPECT(odb.get_dim_id("Channel") == ioda::ObsDimensionId::Channel);
   }
 }
 
@@ -209,6 +228,7 @@ void testGetDb() {
       std::string GroupName = varconf[i].getString("group");
       std::string VarType = varconf[i].getString("type");
       bool SkipDerived = varconf[i].getBool("skip derived", false);
+      bool EmptyObsSpace = Odb->empty();
 
       // Do different checks according to type
       if (VarType == "float") {
@@ -217,7 +237,11 @@ void testGetDb() {
 
         // Check the type from ObsSpace
         ObsDtype VarDataType = Odb->dtype(GroupName, VarName, SkipDerived);
-        EXPECT(VarDataType == ObsDtype::Float);
+        if (EmptyObsSpace) {
+            EXPECT(VarDataType == ObsDtype::Empty);
+        } else {
+            EXPECT(VarDataType == ObsDtype::Float);
+        }
 
         // Check auto-conversion to double from ObsSpace float
         // Check the norm
@@ -236,7 +260,11 @@ void testGetDb() {
 
         // Check the type from ObsSpace
         ObsDtype VarDataType = Odb->dtype(GroupName, VarName, SkipDerived);
-        EXPECT(VarDataType == ObsDtype::Integer);
+        if (EmptyObsSpace) {
+            EXPECT(VarDataType == ObsDtype::Empty);
+        } else {
+            EXPECT(VarDataType == ObsDtype::Integer);
+        }
 
         // Check the norm
         std::vector<int> TestVec(Nlocs);
@@ -254,7 +282,11 @@ void testGetDb() {
 
         // Check the type from ObsSpace
         ObsDtype VarDataType = Odb->dtype(GroupName, VarName, SkipDerived);
-        EXPECT(VarDataType == ObsDtype::Integer_64);
+        if (EmptyObsSpace) {
+            EXPECT(VarDataType == ObsDtype::Empty);
+        } else {
+            EXPECT(VarDataType == ObsDtype::Integer_64);
+        }
 
         // Check the norm
         std::vector<int64_t> TestVec(Nlocs);
@@ -272,52 +304,84 @@ void testGetDb() {
 
         // Check the type from ObsSpace
         ObsDtype VarDataType = Odb->dtype(GroupName, VarName, SkipDerived);
-        EXPECT(VarDataType == ObsDtype::String);
+        if (EmptyObsSpace) {
+            EXPECT(VarDataType == ObsDtype::Empty);
+        } else {
+            EXPECT(VarDataType == ObsDtype::String);
+        }
 
         // Check the first and last values of the vector
         std::string ExpectedFirstValue = varconf[i].getString("first value");
         std::string ExpectedLastValue = varconf[i].getString("last value");
         std::vector<std::string> TestVec(Nlocs);
         Odb->get_db(GroupName, VarName, TestVec, {}, SkipDerived);
-        EXPECT(TestVec[0] == ExpectedFirstValue);
-        EXPECT(TestVec[Nlocs-1] == ExpectedLastValue);
+        if (EmptyObsSpace) {
+          EXPECT(TestVec.size() == 0);
+        } else {
+          oops::Log::debug() << "FirstValue, ExpectedFirstValue: " << TestVec[0] << ", "
+                             << ExpectedFirstValue << std::endl;
+          EXPECT(TestVec[0] == ExpectedFirstValue);
+          oops::Log::debug() << "LastValue, ExpectedLastValue: " << TestVec[Nlocs-1] << ", "
+                             << ExpectedLastValue << std::endl;
+          EXPECT(TestVec[Nlocs-1] == ExpectedLastValue);
+        }
       } else if (VarType == "datetime") {
         // Check if the variable exists
         EXPECT(Odb->has(GroupName, VarName, SkipDerived));
 
         // Check the type from ObsSpace
         ObsDtype VarDataType = Odb->dtype(GroupName, VarName, SkipDerived);
-        EXPECT(VarDataType == ObsDtype::DateTime);
+        if (EmptyObsSpace) {
+            EXPECT(VarDataType == ObsDtype::Empty);
+        } else {
+            EXPECT(VarDataType == ObsDtype::DateTime);
+        }
 
         // Check the first and last values of the vector
         std::string ExpectedFirstValue = varconf[i].getString("first value");
         std::string ExpectedLastValue = varconf[i].getString("last value");
         std::vector<util::DateTime> TestVec(Nlocs);
         Odb->get_db(GroupName, VarName, TestVec, {}, SkipDerived);
-        EXPECT(TestVec[0].toString() == ExpectedFirstValue);
-        EXPECT(TestVec[Nlocs-1].toString() == ExpectedLastValue);
+        if (EmptyObsSpace) {
+          EXPECT(TestVec.size() == 0);
+        } else {
+          EXPECT(TestVec[0].toString() == ExpectedFirstValue);
+          EXPECT(TestVec[Nlocs-1].toString() == ExpectedLastValue);
+        }
       } else if (VarType == "bool") {
         // Check if the variable exists
         EXPECT(Odb->has(GroupName, VarName, SkipDerived));
 
         // Check the type from ObsSpace
         const ObsDtype VarDataType = Odb->dtype(GroupName, VarName, SkipDerived);
-        EXPECT(VarDataType == ObsDtype::Bool);
+        if (EmptyObsSpace) {
+            EXPECT(VarDataType == ObsDtype::Empty);
+        } else {
+            EXPECT(VarDataType == ObsDtype::Bool);
+        }
 
         // Check the first and last values of the vector
         const bool ExpectedFirstValue = varconf[i].getBool("first value");
         const bool ExpectedLastValue = varconf[i].getBool("last value");
         std::vector<bool> TestVec(Nlocs);
         Odb->get_db(GroupName, VarName, TestVec, {}, SkipDerived);
-        EXPECT(TestVec[0] == ExpectedFirstValue);
-        EXPECT(TestVec[Nlocs-1] == ExpectedLastValue);
+        if (EmptyObsSpace) {
+          EXPECT(TestVec.size() == 0);
+        } else {
+          EXPECT(TestVec[0] == ExpectedFirstValue);
+          EXPECT(TestVec[Nlocs-1] == ExpectedLastValue);
+        }
       } else if (VarType == "none") {
         // Check if the variable exists
         EXPECT_NOT(Odb->has(GroupName, VarName, SkipDerived));
 
         // Check the type from ObsSpace
         ObsDtype VarDataType = Odb->dtype(GroupName, VarName, SkipDerived);
-        EXPECT(VarDataType == ObsDtype::None);
+        if (EmptyObsSpace) {
+            EXPECT(VarDataType == ObsDtype::Empty);
+        } else {
+            EXPECT(VarDataType == ObsDtype::None);
+        }
 
 
         // A call to get_db should produce an exception
@@ -512,7 +576,11 @@ void testPutGetChanSelect() {
 
       // Check the type from ObsSpace
       ObsDtype VarDataType = Odb->dtype(GroupName, VarName);
-      EXPECT(VarDataType == ObsDtype::Float);
+      if (Odb->empty()) {
+          EXPECT(VarDataType == ObsDtype::Empty);
+      } else {
+          EXPECT(VarDataType == ObsDtype::Float);
+      }
 
       // Read in the variable
       std::vector<float> OrigVec(Nlocs);
@@ -521,10 +589,10 @@ void testPutGetChanSelect() {
       // Write the variable into the new group
       std::string TestGroupName = GroupName + "_Test";
       std::string PutDbVarName = VarName;
-      std::vector<std::string> DimList = { "nlocs" };
+      std::vector<std::string> DimList = { "Location" };
       if (!Channels.empty()) {
         PutDbVarName += "_" + std::to_string(Channels[0]);
-        DimList.push_back("nchans");
+        DimList.push_back("Channel");
       }
       oops::Log::debug() << "Writing: " << TestGroupName << ", " << PutDbVarName << ", "
                          << DimList << std::endl;
@@ -612,17 +680,17 @@ void testMultiDimTransfer() {
     std::vector<std::string> dimList;
 
     int numElements = Nlocs;
-    dimList.push_back(Odb->get_dim_name(ObsDimensionId::Nlocs));
+    dimList.push_back(Odb->get_dim_name(ObsDimensionId::Location));
     if (Nchans > 0) {
         numElements *= Nchans;
-        dimList.push_back(Odb->get_dim_name(ObsDimensionId::Nchans));
+        dimList.push_back(Odb->get_dim_name(ObsDimensionId::Channel));
     }
 
     // Load up the expected values with numbers 0..n-1.
     TestValues.resize(numElements);
     ExpectedValues.resize(numElements);
     int testValue = 0;
-    for (std::size_t i = 0; i < numElements; ++i) {
+    for (std::size_t i = 0; i < static_cast<size_t>(numElements); ++i) {
       ExpectedValues[i] = testValue;
       testValue++;
     }
@@ -688,9 +756,9 @@ void testObsVariables() {
     ObsTopLevelParameters obsparams;
     obsparams.validateAndDeserialize(Test_::config(jj));
 
-    const oops::Variables & allSimVars = Odb.obsvariables();
-    const oops::Variables & initialSimVars = Odb.initial_obsvariables();
-    const oops::Variables & derivedSimVars = Odb.derived_obsvariables();
+    const oops::ObsVariables & allSimVars = Odb.obsvariables();
+    const oops::ObsVariables & initialSimVars = Odb.initial_obsvariables();
+    const oops::ObsVariables & derivedSimVars = Odb.derived_obsvariables();
 
     EXPECT_EQUAL(initialSimVars, obsparams.simVars);
     EXPECT_EQUAL(derivedSimVars, obsparams.derivedSimVars);
@@ -708,13 +776,13 @@ void testDerivedObsError() {
   for (std::size_t jj = 0; jj < Test_::size(); ++jj) {
     const ioda::ObsSpace & Odb = Test_::obspace(jj);
 
-    const oops::Variables & derivedSimVars = Odb.derived_obsvariables();
+    const oops::ObsVariables & derivedSimVars = Odb.derived_obsvariables();
     for (size_t i = 0; i < derivedSimVars.size(); ++i) {
       EXPECT(Odb.has("ObsError", derivedSimVars[i]));
       std::vector<float> values(Odb.nlocs());
       Odb.get_db("ObsError", derivedSimVars[i], values);
 
-      std::vector<float> expectedValues(Odb.nlocs(), util::missingValue(float()));
+      std::vector<float> expectedValues(Odb.nlocs(), util::missingValue<float>());
       EXPECT_EQUAL(values, expectedValues);
     }
   }

@@ -11,16 +11,26 @@
 #include <cstdlib>
 #include <iostream>
 #include <numeric>
+#include <string>
 #include <typeinfo>
+#include <vector>
+
+#include "eckit/config/LocalConfiguration.h"
+#include "eckit/testing/Test.h"
 
 #include "Eigen/Dense"
-#include "eckit/testing/Test.h"
 #include "ioda/Engines/EngineUtils.h"
+#include "ioda/Engines/WriterFactory.h"
 #include "ioda/Exception.h"
 #include "ioda/Layout.h"
 #include "ioda/ObsGroup.h"
 
 #include "ioda/testconfig.h"
+
+#include "oops/mpi/mpi.h"
+#include "oops/util/Logger.h"
+#include "oops/runs/Run.h"
+#include "oops/runs/Test.h"
 
 void test_obsgroup_helper_funcs(std::string backendType, std::string fileName,
                                 const std::string mappingFile = "") {
@@ -35,13 +45,13 @@ void test_obsgroup_helper_funcs(std::string backendType, std::string fileName,
   // to see if can write the first chunk, resize the variable and write
   // the second chunk.
 
-  // Set nlocs (size: 2*locations) and nchans (size: channels) coordinate values
-  // nlocs set to 0..nlocs-1, and nchans set to 1..nchans
+  // Set nlocs (size: 2*locations) and Channel (size: channels) coordinate values
+  // nlocs set to 0..nlocs-1, and Channel set to 1..nchans
   std::vector<int> nLocs(locationsX2);
   std::iota(nLocs.begin(), nLocs.end(), 0);
 
-  std::vector<int> nChans(channels);
-  std::iota(nChans.begin(), nChans.end(), 1);
+  std::vector<int> Channel(channels);
+  std::iota(Channel.begin(), Channel.end(), 1);
 
   Eigen::ArrayXXf myDataExpected(locationsX2, channels);
   std::vector<float> myLonExpected(locationsX2);
@@ -72,46 +82,51 @@ void test_obsgroup_helper_funcs(std::string backendType, std::string fileName,
   std::vector<int> nLocs2(nLocs.begin() + locations, nLocs.end());
 
   // Create a backend
-  Engines::BackendNames backendName;
-  Engines::BackendCreationParameters backendParams;
+  Group backend;
   if (backendType == "file" || backendType == "fileRemapped") {
-    backendName = Engines::BackendNames::Hdf5File;
-
-    backendParams.fileName = fileName;
-    backendParams.action = Engines::BackendFileActions::Create;
-    backendParams.createMode = Engines::BackendCreateModes::Truncate_If_Exists;
+    // Create an HDF5 file backend for writing and attach to an ObsGroup
+    // Third and fourth arguments to constructFileWriterFromConfig are
+    // "write multiple files" and "is parallel io" respectively.
+    eckit::LocalConfiguration engineConfig =
+        Engines::constructFileBackendConfig("hdf5", fileName);
+    std::unique_ptr<Engines::WriterBase> writerEngine =
+        Engines::constructFileWriterFromConfig(oops::mpi::world(), oops::mpi::myself(), 
+                false, false, engineConfig);
+    backend = writerEngine->getObsGroup();
   } else if (backendType == "memory") {
-    backendName = Engines::BackendNames::ObsStore;
+    // Don't have a factory for memory (readwrite) backends yet
+    Engines::BackendNames backendName = Engines::BackendNames::ObsStore;
+    Engines::BackendCreationParameters backendParams;
+    backend = constructBackend(backendName, backendParams);
   } else {
     throw Exception("Unrecognized backend type", ioda_Here())
             .add("backendType", backendType);
   }
-  Group backend = constructBackend(backendName, backendParams);
 
   // Create an ObsGroup object and attach the backend
   ObsGroup og;
   if (backendType != "fileRemapped") {
     og = ObsGroup::generate(
           backend, {
-            NewDimensionScale<int>("nlocs", locations, ioda::Unlimited, locations),
-            NewDimensionScale<int>("nchans", channels, channels, channels)
+            NewDimensionScale<int>("Location", locations, ioda::Unlimited, locations),
+            NewDimensionScale<int>("Channel", channels, channels, channels)
           });
   } else {
     og = ObsGroup::generate(
           backend,
           {
             NewDimensionScale<int>(
-            "nlocs", locations, ioda::Unlimited, locations),
+            "Location", locations, ioda::Unlimited, locations),
             NewDimensionScale<int>(
-            "nchans", channels, channels, channels) },
+            "Channel", channels, channels, channels) },
           detail::DataLayoutPolicy::generate(detail::DataLayoutPolicy::Policies::ObsGroupODB,
-                                             mappingFile, {"nlocs", "nchans"}));
+                                             mappingFile, {"Location", "Channel"}));
   }
-  Variable nlocs_var = og.vars.open("nlocs");
-  nlocs_var.write(nLocs1);
+  Variable Location_var = og.vars.open("Location");
+  Location_var.write(nLocs1);
 
-  Variable nchans_var = og.vars["nchans"];
-  nchans_var.write(nChans);
+  Variable Channel_var = og.vars["Channel"];
+  Channel_var.write(Channel);
 
   // Set up creation parameters for variables
   ioda::VariableCreationParameters float_params;
@@ -123,36 +138,36 @@ void test_obsgroup_helper_funcs(std::string backendType, std::string fileName,
   Variable lat_var;
   Variable lon_var;
   if (backendType == "fileRemapped") {
-    obs_var = og.vars.createWithScales<float>("ObsValue_renamed/myObs_renamed", {nlocs_var, nchans_var}, float_params);
+    obs_var = og.vars.createWithScales<float>("ObsValue_renamed/myObs_renamed", {Location_var, Channel_var}, float_params);
 
-    og.vars.createWithScales<float>("MetaData_renamed/latitude_renamed", {nlocs_var}, float_params);
+    og.vars.createWithScales<float>("MetaData_renamed/latitude_renamed", {Location_var}, float_params);
     lat_var = og.vars.open("MetaData/latitude");
 
-    og.vars.createWithScales<float>("MetaData_renamed/longitude_renamed", {nlocs_var}, float_params);
+    og.vars.createWithScales<float>("MetaData_renamed/longitude_renamed", {Location_var}, float_params);
     lon_var = og.vars["MetaData/longitude"];
 
     // Now testing that creating a variable not specified in mapping throws an exception
     bool unspecifiedVariableThrows = false;
     try {
-      og.vars.createWithScales<float>("Foo/bar", {nlocs_var}, float_params);
-    } catch (Exception) {
+      og.vars.createWithScales<float>("Foo/bar", {Location_var}, float_params);
+    } catch (const Exception&) {
       unspecifiedVariableThrows = true;
     }
     if (!unspecifiedVariableThrows) {
       throw Exception("Foo/bar did not throw an exception");
     }
   } else {
-    obs_var = og.vars.createWithScales<float>("ObsValue/myObs", {nlocs_var, nchans_var}, float_params);
+    obs_var = og.vars.createWithScales<float>("ObsValue/myObs", {Location_var, Channel_var}, float_params);
 
-    og.vars.createWithScales<float>("MetaData/latitude", {nlocs_var}, float_params);
+    og.vars.createWithScales<float>("MetaData/latitude", {Location_var}, float_params);
     lat_var = og.vars.open("MetaData/latitude");
 
-    og.vars.createWithScales<float>("MetaData/longitude", {nlocs_var}, float_params);
+    og.vars.createWithScales<float>("MetaData/longitude", {Location_var}, float_params);
     lon_var = og.vars["MetaData/longitude"];
   }
 
   // Add attributes to variables
-  obs_var.atts.add<std::string>("coordinates", {"longitude latitude nchans"}, {1})
+  obs_var.atts.add<std::string>("coordinates", {"longitude latitude Channel"}, {1})
     .add<std::string>("long_name", {"obs I made up"}, {1})
     .add<std::string>("units", {"K"}, {1})
     .add<float>("valid_range", {0.0, 50.0}, {2});
@@ -169,8 +184,8 @@ void test_obsgroup_helper_funcs(std::string backendType, std::string fileName,
   lon_var.write(myLonExpected1);
 
   // Append the second data chunk
-  // resize the nlocs variable - do this before writing
-  og.resize({std::pair<ioda::Variable, ioda::Dimensions_t>(nlocs_var, locationsX2)});
+  // resize the Location variable - do this before writing
+  og.resize({std::pair<ioda::Variable, ioda::Dimensions_t>(Location_var, locationsX2)});
 
   // 1D vector selection objects
   std::vector<ioda::Dimensions_t> memStarts(1, 0);
@@ -195,7 +210,7 @@ void test_obsgroup_helper_funcs(std::string backendType, std::string fileName,
   fileSelect2D.select({ioda::SelectionOperator::SET, fileStarts, fileCounts});
 
   // Write the sencond data chunk
-  nlocs_var.write(nLocs2, memSelect1D, fileSelect1D);
+  Location_var.write(nLocs2, memSelect1D, fileSelect1D);
   obs_var.writeWithEigenRegular(myDataExpected2, memSelect2D, fileSelect2D);
   lat_var.write(myLatExpected2, memSelect1D, fileSelect1D);
   lon_var.write(myLonExpected2, memSelect1D, fileSelect1D);
@@ -210,7 +225,13 @@ void test_obsgroup_helper_funcs(std::string backendType, std::string fileName,
   std::vector<float> myLats(locationsX2, 0.0);
   lat_var.read(myLats);
   for (std::size_t i = 0; i < locationsX2; ++i) {
-    double check = fabs((myLats[i] / myLatExpected[i]) - 1.0);
+    // Avoid divide by zero
+    double check;
+    if (myLatExpected[i] == 0.0) {
+      check = fabs(myLats[i]);
+    } else {
+      check = fabs((myLats[i] / myLatExpected[i]) - 1.0);
+    }
     if (check > 1.0e-3) {
       throw Exception("Test lats mismatch outside tolerence (1e-3)", ioda_Here())
               .add("  i", i)
@@ -222,7 +243,13 @@ void test_obsgroup_helper_funcs(std::string backendType, std::string fileName,
   std::vector<float> myLons(locationsX2, 0.0);
   lon_var.read(myLons);
   for (std::size_t i = 0; i < locationsX2; ++i) {
-    double check = fabs((myLons[i] / myLonExpected[i]) - 1.0);
+    // Avoid divide by zero
+    double check;
+    if (myLonExpected[i] == 0.0) {
+      check = fabs(myLons[i]);
+    } else {
+      check = fabs((myLons[i] / myLonExpected[i]) - 1.0);
+    }
     if (check > 1.0e-3) {
       throw Exception("Test lons mismatch outside tolerence (1e-3)", ioda_Here())
               .add("  i", i)
@@ -232,30 +259,32 @@ void test_obsgroup_helper_funcs(std::string backendType, std::string fileName,
   }
 
   // Some more checks
-  Expects(og.open("ObsValue").vars["myObs"].isDimensionScaleAttached(1, og.vars["nchans"]));
+  Expects(og.open("ObsValue").vars["myObs"].isDimensionScaleAttached(1, og.vars["Channel"]));
 }
 
-int main(int argc, char** argv) {
-  if (argc < 2) {
-    std::cerr << "Need to specify backend type (file, memory)" << std::endl;
-    return 1;
-  }
-  std::string backendType(argv[1]);
+int runTest(const std::string & backendType, const std::string & defaultMappingFile,
+            const std::string & incompleteMappingFile) {
   try {
     if (backendType == "file") {
-      std::cout << "Testing file backend" << std::endl;
+      oops::Log::info() << "Testing file backend, "
+                        << "using the default Data Layout Policy" << std::endl;
       test_obsgroup_helper_funcs(backendType, {"ioda-engines_obsgroup_append-file.hdf5"});
     } else if (backendType == "memory") {
-      std::cout << "Testing memory backend" << std::endl;
+      oops::Log::info() << "Testing memory backend, "
+                        << "using the default Data Layout Policy" << std::endl;
       test_obsgroup_helper_funcs(backendType, {""});
     } else if (backendType == "fileRemapped") {
-      std::cout << "Testing ODB Data Layout Policy with explicit mapping file" << std::endl;
+      oops::Log::info() << "Testing file backend, remapped, "
+                        << "using the ODB Data Layout Policy with a complete "
+                        << "mapping file" << std::endl;
       std::string mappingFile = std::string(IODA_ENGINES_TEST_SOURCE_DIR)
-        + "/obsgroup/odb_default_name_map.yaml";
+        + "/obsgroup/" + defaultMappingFile;
       test_obsgroup_helper_funcs(backendType, {"append-remapped.hdf5"}, mappingFile);
-      std::cout << "Testing ODB Data Layout Policy with explicit mapping file" << std::endl;
+      oops::Log::info() << "Testing file backend, remapped, "
+                        << "using the ODB Data Layout Policy with an incomplete "
+                        << "mapping file" << std::endl;
       mappingFile = std::string(IODA_ENGINES_TEST_SOURCE_DIR)
-        + "/obsgroup/odb_incomplete_name_map.yaml";
+        + "/obsgroup/" + incompleteMappingFile;
       bool failedWhenNotAllVarsRemapped = false;
       try {
         test_obsgroup_helper_funcs(backendType, {"append-remapped.hdf5"}, mappingFile);
@@ -269,7 +298,7 @@ int main(int argc, char** argv) {
       } catch (const std::exception& e) {
         odbGroupFailedWithoutMapping = true;
       }
-      assert(odbGroupFailedWithoutMapping && failedWhenNotAllVarsRemapped);
+      ASSERT(odbGroupFailedWithoutMapping && failedWhenNotAllVarsRemapped);
     } else {
       throw ioda::Exception("Unrecognized backend type:", ioda_Here())
               .add("Backend type", backendType);
@@ -279,4 +308,39 @@ int main(int argc, char** argv) {
     return 1;
   }
   return 0;
+}
+
+// -----------------------------------------------------------------------------
+
+CASE("AppendTests") {
+  const eckit::Configuration &conf = ::test::TestEnvironment::config();
+  std::vector<eckit::LocalConfiguration> confs;
+  std::string defaultMappingFile = conf.getString("default mapping file");
+  std::string incompleteMappingFile = conf.getString("incomplete mapping file");
+  conf.get("test cases", confs);
+  for (size_t jconf = 0; jconf < confs.size(); ++jconf) {
+    eckit::LocalConfiguration config = confs[jconf];
+    std::string testName = config.getString("name");
+    std::string testBackend = config.getString("backend");
+    runTest(testBackend, defaultMappingFile, incompleteMappingFile);
+  }
+}
+
+// -----------------------------------------------------------------------------
+
+class ObsGroupAppend : public oops::Test {
+ private:
+  std::string testid() const override {return "ioda::test::obsgroup-append";}
+
+  void register_tests() const override {}
+
+  void clear() const override {}
+};
+
+// -----------------------------------------------------------------------------
+
+int main(int argc, char **argv) {
+  oops::Run run(argc, argv);
+  ObsGroupAppend tests;
+  return run.execute(tests);
 }

@@ -1,6 +1,7 @@
 ---
-window begin: "2021-01-15T12:00:00Z"
-window end: "2021-01-15T18:00:00Z"
+time window:
+  begin: "2021-01-15T12:00:00Z"
+  end: "2021-01-15T18:00:00Z"
 
 observations:
 - obs space:
@@ -13,9 +14,10 @@ observations:
         type: H5File
         obsfile: "Data/testinput_tier_1/obsspace_index_recnum.nc4"
   test data:
+    gnlocs: 16
+    gnlocs outside time window: 4
     nlocs: 16
     nrecs: 16
-    nvars: 1
     obs are sorted: false
     mpi size1:
       rank0:

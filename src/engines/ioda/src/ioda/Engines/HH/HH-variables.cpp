@@ -141,7 +141,7 @@ Variable HH_Variable::attachDimensionScale(unsigned int DimensionNumber, const V
     if (res != 0) throw Exception("Dimension scale attachment failed.", ioda_Here(), errOpts);
 
     return Variable{shared_from_this()};
-  } catch (std::bad_cast) {
+  } catch (const std::bad_cast&) {
     throw Exception("Cannot attach dimension scales across incompatible backends.",
       ioda_Here(), errOpts);
   }
@@ -165,7 +165,7 @@ Variable HH_Variable::detachDimensionScale(unsigned int DimensionNumber, const V
     if (res != 0) throw Exception("Dimension scale detachment failed", ioda_Here(), errOpts);
 
     return Variable{shared_from_this()};
-  } catch (std::bad_cast) {
+  } catch (const std::bad_cast&) {
     throw Exception("Cannot detach dimension scales across incompatible backends.",
       ioda_Here(), errOpts);
   }
@@ -444,7 +444,7 @@ HH_hid_t HH_Variable::getSpaceWithSelection(const Selection& sel) const {
       // Only return the concretized selection if this is the correct backend.
       auto csel = std::dynamic_pointer_cast<HH_Selection>(concretized);
       return csel->sel;
-    } catch (std::bad_cast) {
+    } catch (const std::bad_cast&) {
       sel.invalidate();
     }
   }
@@ -611,12 +611,13 @@ Variable HH_Variable::writeImpl(gsl::span<const char> data, const Type& in_memor
   H5T_class_t varTypeClass = H5Tget_class(varType());
 
   // Create a data transfer property list to be used in all of the following H5Dwrite
-  // commands. If running in parallel io mode, we will use the collective style of
-  // writing.
+  // commands. If running in parallel io mode, we will use the independent style of
+  // writing. We are using independent for now since we have discovered issues on
+  // some platforms with collective style.
   hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
   if (plist_id < 0) throw Exception("H5Pcreate failed", ioda_Here());
   if (isParallelIo) {
-    herr_t rc = H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+    herr_t rc = H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_INDEPENDENT);
     if (rc < 0) throw Exception("H5Pset_fapl_mpio failed", ioda_Here());
   }
   HH_hid_t xfer_plist(plist_id, Handles::Closers::CloseHDF5PropertyList::CloseP);
@@ -642,7 +643,6 @@ Variable HH_Variable::writeImpl(gsl::span<const char> data, const Type& in_memor
     else if (isMemStrVar) {
       // Variable-length in memory. Fixed-length in var.
       size_t strLen = H5Tget_size(varType());
-      size_t numStrs = getDimensions().numElements;
 
       std::vector<char> out_buf = convertVariableLengthToFixedLength(data, strLen, false);
 
@@ -654,8 +654,6 @@ Variable HH_Variable::writeImpl(gsl::span<const char> data, const Type& in_memor
       // Rare conversion. Included for completeness.
 
       size_t strLen      = H5Tget_size(memTypeBackend->handle());
-      size_t numStrs     = getDimensions().numElements;
-      size_t totalStrLen = strLen * numStrs;
 
       auto converted_data_holder = convertFixedLengthToVariableLength(data, strLen);
       char* converted_data = reinterpret_cast<char*>(converted_data_holder.DataPointers.data());
@@ -737,7 +735,6 @@ Variable HH_Variable::read(gsl::span<char> data, const Type& in_memory_dataType,
 
       size_t strLen      = H5Tget_size(memTypeBackend->handle());
       size_t numStrs     = getDimensions().numElements;  // !!!
-      size_t totalStrLen = strLen * numStrs;
 
       std::vector<char> in_buf(numStrs * sizeof(char*));
 
@@ -906,7 +903,7 @@ HH_Variable::FillValueData_t HH_Variable::getFillValue(HH_hid_t create_plist) co
 
       size_t szType_inBytes = H5Tget_size(hType());
 
-      // Basic types and string pointers fit in the union. Fixed-length string
+      // Basic types fit in the union. Fixed-length and variable-length string
       // types do not, which is why we create a special buffer to accommodate.
       std::vector<char> fvbuf(szType_inBytes, 0);
       if (H5Pget_fill_value(create_plist.get(), hType(),
@@ -929,6 +926,7 @@ HH_Variable::FillValueData_t HH_Variable::getFillValue(HH_hid_t create_plist) co
           // It makes no sense to have a multidimensional fill.
           if (ccp[0]) {
             res.stringFillValue_ = std::string(ccp[0]);
+            res.isString_ = true;
             // Do proper deallocation of the HDF5-returned string array.
             if (H5free_memory(const_cast<void*>(reinterpret_cast<const void*>(ccp[0]))) < 0)
               throw Exception(ioda_Here());
@@ -936,6 +934,7 @@ HH_Variable::FillValueData_t HH_Variable::getFillValue(HH_hid_t create_plist) co
         } else {
           // Fixed-length string
           res.stringFillValue_ = std::string(fvbuf.data(), fvbuf.size());
+          res.isString_ = true;
         }
       } else {
         if (szType_inBytes > sizeof(res.fillValue_))

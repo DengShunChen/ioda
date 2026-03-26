@@ -7,4 +7,9 @@ ecbuild_add_executable( TARGET  time_IodaIO.x
                         SOURCES timeIodaIO.cc
                         LIBS    ioda )
 
+ecbuild_add_executable( TARGET  ioda-buildInputFileSet.x
+                        SOURCES buildInputFileSet.cc
+                        LIBS    ioda )
+
 add_subdirectory( validator )
+add_subdirectory( odfDemo )

@@ -1,6 +1,6 @@
 #pragma once
 /*
- * (C) Copyright 2021 UCAR
+ * (C) Copyright 2021-2023 UCAR
  *
  * This software is licensed under the terms of the Apache Licence Version 2.0
  * which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
@@ -21,13 +21,16 @@
 
 #include "../defs.h"
 
+#include "eckit/config/LocalConfiguration.h"
+
 #include "ioda/Exception.h"
+#include "ioda/Variables/Has_Variables.h"
 #include "ioda/Variables/Variable.h"
 
 namespace ioda {
 
 class Group;
-class Named_Variable;
+struct Named_Variable;
 
 namespace VarUtils {
 
@@ -187,6 +190,46 @@ void forEachSupportedVariableType(const Action &action) {
   action(std::string());
   action(char());
 }
+
+/// \brief list out dimensions in YAML format given a dimension list structure
+/// \param dimVarList dimension variable list structure
+/// \param indent used for formatting the correct indent level in the output YAML
+/// \param yamlStream stringstream containing YAML
+void listDimensionsAsYaml(const Vec_Named_Variable & dimVarList,
+                          const std::string & indent, std::stringstream & yamlStream);
+
+/// \brief list out regular variables in YAML format given a variable list structure
+/// \param regularVarList variable list structure
+/// \param dimsAttachedToVars map showing which dimensions are associated with each variable
+/// \param indent used for formatting the correct indent level in the output YAML
+/// \param yamlStream stringstream containing YAML
+void listVariablesAsYaml(const Vec_Named_Variable & regularVarList,
+                         const VarDimMap & dimsAttachedToVars,
+                         const std::string & indent, std::stringstream & yamlStream);
+
+/// \brief create dimensions from an eckit LocalConfiguration
+/// \param atts Has_Variables container
+/// \param dimConfigs vector of eckit LocalConfiguration (list of dimensions)
+/// \param globalNlocs total number of locations across all MPI tasks
+void createDimensionsFromConfig(ioda::Has_Variables & vars,
+                                const std::vector<eckit::LocalConfiguration> & dimConfigs,
+                                const std::size_t globalNlocs);
+
+/// \brief create variables from an eckit LocalConfiguration
+/// \param atts Has_Variables container
+/// \param varConfigs vector of eckit LocalConfiguration (list of variables)
+/// \param globalNlocs total number of locations across all MPI tasks
+void createVariablesFromConfig(ioda::Has_Variables & vars,
+                               const std::vector<eckit::LocalConfiguration> & varConfigs,
+                               const std::size_t globalNlocs);
+
+/// \brief get a recommended chunk size along the Locations dimension for an output file
+/// \details This function will return the minimum of totalNumLocs and a built-in
+/// maximum chunk size (10,000 for now). This is intended to be applied to the Location
+/// dimension, and the totalNumLocs can vary according to the total number of locations
+/// going into the output file.
+/// \param totalNumLocs the total number of locations going into the target output file
+std::size_t getLocationChunkSize(const std::size_t totalNumLocs);
 
 }  // end namespace VarUtils
 }  // end namespace ioda

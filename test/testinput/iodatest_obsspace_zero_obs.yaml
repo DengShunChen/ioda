@@ -1,12 +1,13 @@
 ---
-window begin: "2018-04-14T21:00:00Z"
-window end: "2018-04-15T03:00:00Z"
+time window:
+  begin: "2018-04-14T21:00:00Z"
+  end: "2018-04-15T03:00:00Z"
 
 observations:
 - obs space:
     name: "Zero Obs"
-    simulated variables: ['brightness_temperature']
-    observed variables: ['brightness_temperature']
+    simulated variables: ['brightnessTemperature']
+    observed variables: ['brightnessTemperature']
     channels: 1-15
     obsdatain:
       engine:
@@ -17,9 +18,11 @@ observations:
         type: H5File
         obsfile: "testoutput/zero_obs_v2_out.nc4"
   test data:
-    nlocs: 0
+    gnlocs: 0
+    gnlocs outside time window: 0
+    gnlocs rejected by qc: 0
+    nlocs from source: 0
     nrecs: 0
-    nvars: 2
     obs perturbations seed: 0
     expected group variables: []
     expected sort variable: ""

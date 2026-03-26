@@ -8,14 +8,14 @@
 # IODA
 ################################################################################
 
-cmake_minimum_required( VERSION 3.12 )
+cmake_minimum_required( VERSION 3.14 )
 option(IODA_BUILD_LANGUAGE_FORTRAN "Build Fortran bindings." ON)
 list( APPEND IODA_LANGUAGES CXX)
 if (IODA_BUILD_LANGUAGE_FORTRAN)
 	list( APPEND IODA_LANGUAGES Fortran)
 endif()
 
-project( ioda VERSION 2.3.0 LANGUAGES ${IODA_LANGUAGES} )
+project( ioda VERSION 2.9.0 LANGUAGES ${IODA_LANGUAGES} )
 
 include( FeatureSummary )
 
@@ -44,21 +44,29 @@ set(HDF5_PREFER_PARALLEL true) # CMake sometimes mistakenly finds a serial syste
 find_package( HDF5 REQUIRED COMPONENTS C HL )
 find_package( MPI REQUIRED )
 find_package( jedicmake REQUIRED )
-find_package( eckit 1.11.6 REQUIRED )
-find_package( fckit 0.7.0 REQUIRED )
-find_package( oops 1.3.0 REQUIRED )
+find_package( eckit 1.23.0 REQUIRED )
+find_package( fckit 0.10.1 REQUIRED )
+find_package( oops REQUIRED )
 find_package( Eigen3 REQUIRED NO_MODULE HINTS
               $ENV{Eigen3_ROOT} $ENV{EIGEN3_ROOT} $ENV{Eigen_ROOT} $ENV{EIGEN_ROOT}
               $ENV{Eigen3_PATH} $ENV{EIGEN3_PATH} $ENV{Eigen_PATH} $ENV{EIGEN_PATH} )
 find_package( gsl-lite REQUIRED HINTS $ENV{gsl_lite_DIR} )
 find_package( udunits 2.2.0 REQUIRED )
 find_package( NetCDF REQUIRED COMPONENTS Fortran )  # No idea why oops is not importing this correctly
+find_package( Boost 1.64.0 REQUIRED )
 
 # Optional
-find_package( odc 1.0.2 QUIET )   # Needed for odc
-find_package( Boost 1.64.0 )      # Provides an implementation of optional
-find_package( Python3 COMPONENTS Interpreter Development )
+find_package( odc 1.4.6 QUIET )   # Needed for odc
+find_package( bufr 12.0.1 QUIET )
+find_package( NetCDF OPTIONAL_COMPONENTS CXX ) # Needed for bufr-query
+find_package( bufr_query QUIET )
+
+# Python-finding settings
+set(Python3_FIND_REGISTRY "LAST")
+set(Python3_FIND_FRAMEWORK "LAST")
+find_package( Python3 COMPONENTS Interpreter Development)
 find_package( pybind11 QUIET)
+
 
 if (pybind11_FOUND)
   option(BUILD_PYTHON_BINDINGS "Build Python bindings using pybind11?" ON)
@@ -67,22 +75,31 @@ else()
 endif()
 add_feature_info(Python BUILD_PYTHON_BINDINGS "Build Python bindings using pybind11")
 
+## Test data
+
+# DH 2023/10/06 - this is unfortunately still true ...
 ### The ioda_data package is problematic in bundles because it has some special CMake logic
 ### at the root bundle location. So, we cannot find the ioda data while in ioda!
-### Basically, with the current logic ioda_data must be loaded after ioda.
-#find_package( ioda_data QUIET )   # Needed for tests
-
-
-## Files used by both test and in non-test executables
-install(DIRECTORY share/ioda
-        TYPE DATA
-        COMPONENT share )
-set( IODA_YAML_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/share/ioda/yaml )
+### Basically, with the current logic we hack ioda-data_FOUND to match ENABLE_IODA_DATA
+#find_package( ioda-data QUIET )
+if (ENABLE_IODA_DATA)
+  set (ioda-data_FOUND TRUE)
+else()
+  # Set values for downloading ioda test data from tarball
+  set (ioda_data_download_url "https://bin.ssec.wisc.edu/pub/s4/CRTM/file")
+  set (ioda_data_tag "2.9.0")
+  set (ioda_data_tarball_name "ioda_testinput_tier_1_${ioda_data_tag}.tar.gz")
+  set (ioda_data_tarball_hash "94fc90a04f6587b9a07607dfadb04d94")
+endif()
 
 ## Sources
+add_subdirectory( share )         # no arch data
 add_subdirectory( src/engines )   # `ioda_engines` target
 add_subdirectory( src )           # `ioda` target
 add_subdirectory( src/mains )     # ioda executable targets
+if ( Python3_FOUND )
+    add_subdirectory( src/python ) # ioda python targets
+endif()
 add_subdirectory( test )          # ioda ctests
 add_subdirectory( tools )         # misc tools
 

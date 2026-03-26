@@ -1,11 +1,12 @@
 ---
-window begin: 2018-04-14T21:00:00Z
-window end: 2018-04-15T03:00:00Z
+time window:
+  begin: 2018-04-14T21:00:00Z
+  end: 2018-04-15T03:00:00Z
 observations:
 - obs space:
     name: Radiosonde_1var_RoundRobin
     simulated variables:
-    - air_temperature
+    - airTemperature
     obsdatain:
       engine:
         type: H5File
@@ -19,10 +20,10 @@ observations:
 - obs space:
     name: Radiosonde_4vars_RoundRobin
     simulated variables:
-    - air_temperature
-    - specific_humidity
-    - eastward_wind
-    - northward_wind
+    - airTemperature
+    - specificHumidity
+    - windEastward
+    - windNorthward
     obsdatain:
       engine:
         type: H5File
@@ -36,7 +37,7 @@ observations:
 - obs space:
     name: Radiosonde_1var_Inefficient
     simulated variables:
-    - air_temperature
+    - airTemperature
     obsdatain:
       engine:
         type: H5File
@@ -50,10 +51,10 @@ observations:
 - obs space:
     name: Radiosonde_4vars_Inefficient
     simulated variables:
-    - air_temperature
-    - specific_humidity
-    - eastward_wind
-    - northward_wind
+    - airTemperature
+    - specificHumidity
+    - windEastward
+    - windNorthward
     obsdatain:
       engine:
         type: H5File
@@ -67,7 +68,7 @@ observations:
 - obs space:
     name: Radiosonde_1var_Halo
     simulated variables:
-    - air_temperature
+    - airTemperature
     obsdatain:
       engine:
         type: H5File
@@ -82,10 +83,10 @@ observations:
 - obs space:
     name: Radiosonde_4vars_Halo
     simulated variables:
-    - air_temperature
-    - specific_humidity
-    - eastward_wind
-    - northward_wind
+    - airTemperature
+    - specificHumidity
+    - windEastward
+    - windNorthward
     obsdatain:
       engine:
         type: H5File

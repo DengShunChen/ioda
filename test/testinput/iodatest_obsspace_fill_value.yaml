@@ -1,6 +1,7 @@
 ---
-window begin: "2018-04-14T21:00:00Z"
-window end: "2018-04-15T03:00:00Z"
+time window:
+  begin: "2018-04-14T21:00:00Z"
+  end: "2018-04-15T03:00:00Z"
 
 observations:
 - obs space:
@@ -12,9 +13,11 @@ observations:
         type: H5File
         obsfile: "Data/testinput_tier_1/fill_value.nc4"
   test data:
-    nlocs: 5
+    gnlocs: 5
+    gnlocs outside time window: 0
+    gnlocs rejected by qc: 0
+    nlocs from source: 5
     nrecs: 5
-    nvars: 0
     obs perturbations seed: 0
     expected group variables: []
     expected sort variable: ""
@@ -35,7 +38,7 @@ observations:
         group: "NoFillValue"
         type: "string"
         first value: "ABC"
-        last value: "*** MISSING ***"
+        last value: "MISSING*"
 
       # only the hdf fill values specified -> use them
       - name: "float_var"
@@ -52,7 +55,7 @@ observations:
         group: "HdfFillValue"
         type: "string"
         first value: "ABC"
-        last value: "*** MISSING ***"
+        last value: "MISSING*"
 
       # only the nc fill values specified -> use them
       - name: "float_var"
@@ -69,7 +72,7 @@ observations:
         group: "NcFillValue"
         type: "string"
         first value: "ABC"
-        last value: "*** MISSING ***"
+        last value: "MISSING*"
 
       # both hdf and netcdf fill values specified -> use netcdf fill values
       - name: "float_var"
@@ -86,7 +89,7 @@ observations:
         group: "BothFillValue"
         type: "string"
         first value: "ABC"
-        last value: "*** MISSING ***"
+        last value: "MISSING*"
 
     tolerance:
       - 1.0e-14

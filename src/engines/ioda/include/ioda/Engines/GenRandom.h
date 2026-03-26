@@ -12,6 +12,7 @@
 #include "eckit/mpi/Comm.h"
 
 #include "ioda/Engines/ReaderBase.h"
+#include "ioda/Engines/ReaderFactory.h"
 
 namespace util {
   class DateTime;
@@ -45,11 +46,27 @@ class GenRandomParameters : public ReaderParametersBase {
     /// \brief longitude range end
     oops::RequiredParameter<float> lonEnd{"lon2", this};
 
+    /// \brief control parameter for which vertical coordinate to use
+    oops::OptionalParameter<std::string> vcoordType{"vert coord type", this};
+
+    /// \brief vertical coordinate range start
+    oops::OptionalParameter<float> vcoordStart{"vert coord1", this};
+
+    /// \brief vertical coordinate range end
+    oops::OptionalParameter<float> vcoordEnd{"vert coord2", this};
+
     /// \brief random seed
     oops::OptionalParameter<int> ranSeed{"random seed", this};
 
+    /// \brief obs values
+    oops::Parameter<std::vector<float>> obsValues{"obs values", { }, this};
+
     /// \brief obs error estimates
     oops::Parameter<std::vector<float>> obsErrors{"obs errors", { }, this};
+
+    bool isFileBackend() const override { return false; }
+
+    std::string getFileName() const override { return std::string(""); }
 };
 
 // Classes
@@ -59,9 +76,7 @@ class GenRandom: public ReaderBase {
   typedef GenRandomParameters Parameters_;
 
   // Constructor via parameters
-  GenRandom(const Parameters_ & params, const util::DateTime & winStart,
-            const util::DateTime & winEnd, const eckit::mpi::Comm & comm,
-            const eckit::mpi::Comm & timeComm, const std::vector<std::string> & obsVarNames);
+  GenRandom(const Parameters_ & params, const ReaderCreationParameters & createParams);
 
   bool applyLocationsCheck() const override { return false; }
 
@@ -80,6 +95,7 @@ class GenRandom: public ReaderBase {
   /// \param params Parameters structure specific to the generate random method
   void genDistRandom(const Parameters_ & params);
 
+  std::string fileName() const override;
   void print(std::ostream & os) const override;
 };
 

@@ -14,14 +14,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 
-import ioda
+from pyioda import ioda
 
 g = ioda.Engines.HH.openFile(
     name = "Example-05a-python.hdf5",
     mode = ioda.Engines.BackendOpenModes.Read_Only)
 og = ioda.ObsGroup(g)
 
-tbName = "ObsValue/brightness_temperature"
+tbName = "ObsValue/brightnessTemperature"
 latName = "MetaData/latitude"
 lonName = "MetaData/longitude"
 

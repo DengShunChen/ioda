@@ -17,6 +17,7 @@
 #include "oops/util/parameters/RequiredParameter.h"
 #include "oops/util/parameters/RequiredPolymorphicParameter.h"
 #include "oops/util/Printable.h"
+#include "oops/util/TimeWindow.h"
 
 #include "ioda/Engines/EngineUtils.h"
 #include "ioda/ObsGroup.h"
@@ -28,7 +29,7 @@ class Printable;
 class ReaderFactory;
 
 //----------------------------------------------------------------------------------------
-// ReaderFactory parameters base class
+// Reader configuration parameters base class
 //----------------------------------------------------------------------------------------
 
 /// \brief Parameters base class for the parameters subclasses associated with the
@@ -39,18 +40,43 @@ class ReaderParametersBase : public oops::Parameters {
  public:
     /// \brief Type of the ReaderBase subclass to use.
     oops::RequiredParameter<std::string> type{"type", this};
+
+    /// \brief return true if the backend uses an input file
+    /// \details This is true for file backends and false for generator
+    /// backends.
+    virtual bool isFileBackend() const = 0;
+
+    /// \brief return specified file name
+    /// \details the "obsfile:" specification will be returned for file badckends
+    /// and an empty string will be returned for generator backends
+    virtual std::string getFileName() const = 0;
 };
 
-/// \brief Polymorphic parameter holding an instance of a subclass of ReaderParametersBase.
-class ReaderParametersWrapper : public oops::Parameters {
-  OOPS_CONCRETE_PARAMETERS(ReaderParametersWrapper, Parameters)
- public:
-  /// After deserialization, holds an instance of a subclass of ReaderParametersBase
-  /// controlling the behavior of a ioda backend engine. The type of the subclass is
-  /// determined by the value of the "type" key in the Configuration object from
-  /// which this object is deserialized.
-  oops::RequiredPolymorphicParameter<ReaderParametersBase, ReaderFactory>
-      engineParameters{"type", "type of the IODA backend engine", this};
+//----------------------------------------------------------------------------------------
+// Reader creation parameters
+//----------------------------------------------------------------------------------------
+
+class ReaderCreationParameters {
+  public:
+    ReaderCreationParameters(const util::TimeWindow timeWindow,
+                             const eckit::mpi::Comm & comm, const eckit::mpi::Comm & timeComm,
+                             const std::vector<std::string> & obsVarNames,
+                             const bool isParallelIo);
+    const util::TimeWindow timeWindow;
+
+    /// \brief io pool communicator group
+    const eckit::mpi::Comm & comm;
+
+    /// \brief time communicator group
+    const eckit::mpi::Comm & timeComm;
+
+    /// \brief list of variables to be simulated from the obs source
+    const std::vector<std::string> & obsVarNames;
+
+    /// \brief flag indicating whether a parallel io backend is to be used
+    /// \details This flag is set to true to indicate a parallel io backend (if available)
+    /// should be used.
+    const bool isParallelIo;
 };
 
 //----------------------------------------------------------------------------------------
@@ -65,10 +91,14 @@ class ReaderParametersWrapper : public oops::Parameters {
 
 class ReaderBase : public util::Printable {
  public:
-    ReaderBase(const util::DateTime & winStart, const util::DateTime & winEnd,
-               const eckit::mpi::Comm & comm, const eckit::mpi::Comm & timeComm,
-               const std::vector<std::string> & obsVarNames);
+    ReaderBase(const ReaderCreationParameters & createParams);
     virtual ~ReaderBase() {}
+
+    /// \brief initialize the engine backend after construction
+    virtual void initialize() {};
+
+    /// \brief finalize the engine backend before destruction
+    virtual void finalize() {};
 
     /// \brief return the backend that stores the data
     inline ioda::ObsGroup getObsGroup() { return obs_group_; }
@@ -76,8 +106,10 @@ class ReaderBase : public util::Printable {
     /// \brief return the backend that stores the data
     inline const ioda::ObsGroup getObsGroup() const { return obs_group_; }
 
-    /// \brief return the input file name (empty string when using a generator)
-    std::string fileName() { return fileName_; }
+    /// \brief return a representative file name for the reader backend
+    /// \detail this will be the file name for file sources, and a descriptive
+    /// name for generator sources.
+    virtual std::string fileName() const = 0;
 
     /// \brief return true if the locations data (lat, lon, datetime) need to be checked
     /// \details The locations check filters out locations that:
@@ -97,99 +129,9 @@ class ReaderBase : public util::Printable {
     /// \brief ObsGroup container associated with the selected backend engine
     ioda::ObsGroup obs_group_;
 
-    /// \brief DA window start
-    const util::DateTime winStart_;
-
-    /// \brief DA window end
-    const util::DateTime winEnd_;
-
-    /// \brief primary MPI communicator
-    const eckit::mpi::Comm & comm_;
-
-    /// \brief time bin MPI communicator
-    const eckit::mpi::Comm & timeComm_;
-
-    /// \brief list of varible names that will be used downstream
-    const std::vector<std::string> obsVarNames_;
-
-    /// \brief input file name for those readers that use a file
-    std::string fileName_;
+    /// \brief creation parameters
+    ReaderCreationParameters createParams_;
 };
-
-//----------------------------------------------------------------------------------------
-// Reader factory classes
-//----------------------------------------------------------------------------------------
-
-class ReaderFactory {
- public:
-  /// \brief Create and return a new instance of an ReaderBase subclass.
-  /// \param params Parameters object for the engine creation
-  static std::unique_ptr<ReaderBase> create(const ReaderParametersBase & params,
-                                            const util::DateTime & winStart,
-                                            const util::DateTime & winEnd,
-                                            const eckit::mpi::Comm & comm,
-                                            const eckit::mpi::Comm & timeComm,
-                                            const std::vector<std::string> & obsVarNames);
-
-  /// \brief Create and return an instance of the subclass of ObsOperatorParametersBase
-  /// storing parameters of observation operators of the specified type.
-  static std::unique_ptr<ReaderParametersBase> createParameters(const std::string & type);
-
-  /// \brief Return the names of all ReaderBase subclasses that can be created by
-  /// one of the registered makers.
-  static std::vector<std::string> getMakerNames();
-
-  virtual ~ReaderFactory() = default;
-
- protected:
-  /// \brief Register a maker able to create instances of the specified ReaderBase subclass.
-  explicit ReaderFactory(const std::string & type);
-
- private:
-  /// \brief Construct a new instance of an ReaderBase subclass.
-  /// \param params Parameters object for the engine construction
-  virtual std::unique_ptr<ReaderBase> make(const ReaderParametersBase & params,
-                                           const util::DateTime & winStart,
-                                           const util::DateTime & winEnd,
-                                           const eckit::mpi::Comm & comm,
-                                           const eckit::mpi::Comm & timeComm,
-                                           const std::vector<std::string> & obsVarNames) = 0;
-
-  /// \brief Construct a new instance of an ReaderParametersBase subclass.
-  virtual std::unique_ptr<ReaderParametersBase> makeParameters() const = 0;
-
-  /// \brief Return reference to the map holding the registered makers
-  static std::map<std::string, ReaderFactory*> & getMakers();
-
-  /// \brief Return reference to a registered maker
-  static ReaderFactory& getMaker(const std::string & type);
-};
-
-template <class T>
-class ReaderMaker : public ReaderFactory {
-  typedef typename T::Parameters_ Parameters_;
-
-  /// \brief Construct a new instance of an ReaderBase subclass.
-  /// \param params Parameters object for the engine construction
-  std::unique_ptr<ReaderBase> make(const ReaderParametersBase & params,
-                                   const util::DateTime & winStart,
-                                   const util::DateTime & winEnd,
-                                   const eckit::mpi::Comm & comm,
-                                   const eckit::mpi::Comm & timeComm,
-                                   const std::vector<std::string> & obsVarNames) override {
-    const auto &stronglyTypedParameters = dynamic_cast<const Parameters_&>(params);
-    return std::make_unique<T>(stronglyTypedParameters, winStart, winEnd,
-                               comm, timeComm, obsVarNames);
-  }
-
-  /// \brief Construct a new instance of an ReaderParametersBase subclass.
-  std::unique_ptr<ReaderParametersBase> makeParameters() const override {
-    return std::make_unique<Parameters_>();
-  }
- public:
-  explicit ReaderMaker(const std::string & type) : ReaderFactory(type) {}
-};
-
 
 }  // namespace Engines
 }  // namespace ioda

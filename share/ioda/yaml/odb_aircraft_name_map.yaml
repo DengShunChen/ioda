@@ -1,0 +1,32 @@
+varno-independent columns:
+  - name: "MetaData/latitude"
+    source: "lat"
+  - name: "MetaData/longitude"
+    source: "lon"
+  - name: "MetaData/observationSubTypeNum"
+    source: "ops_subtype"
+  - name: "MetaData/pressure"
+    source: "initial_vertco_reference"
+  - name: "MetaData/sequenceNumber"
+    source: "seqno"
+  - name: "MetaData/stationElevation"
+    source: "stalt"
+  - name: "MetaData/stationIdentification"
+    source: "statid"
+varno-dependent columns:
+  - source: "initial_obsvalue"
+    group name: "ObsValue"
+    varno-to-variable-name mapping: &obsvalue_varnos
+      - name: "airTemperature"
+        varno: 2
+      - name: "relativeHumidity"
+        varno: 29
+      - name: "windDirection"
+        varno: 111
+      - name: "windSpeed"
+        varno: 112
+      - name: "waterVaporMixingRatio"
+        varno: 226
+  - source: "obs_error"
+    group name: "ObsError"
+    varno-to-variable-name mapping: *obsvalue_varnos

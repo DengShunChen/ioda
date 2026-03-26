@@ -10,15 +10,16 @@
  * \ingroup ioda_cxx_api
  *
  * @{
- * \file Factory.h
+ * \file EngineUtils.h
  * \brief Definitions for setting up backends with file and memory I/O.
  */
-#include <iostream>
 #include <mpi.h>
 #include <string>
 #include <vector>
 
 #include "../defs.h"
+
+#include "eckit/config/LocalConfiguration.h"
 
 #include "oops/util/parameters/ParameterTraits.h"
 
@@ -28,12 +29,14 @@ class ObsGroup;
 
 /// The backends that implement the ioda-engines functionality.
 namespace Engines {
+
 /// \brief Backend names
 /// \ingroup ioda_cxx_engines_pub
 enum class BackendNames {
   Hdf5File,  ///< HDF5 file access
   Hdf5Mem,   ///< HDF5 in-memory "file"
   ObsStore,  ///< ObsStore in-memory
+  ODB,       ///< ODB in-memory
 };
 
 /// Actions for accessing a file
@@ -85,19 +88,65 @@ public:
   BackendCreationParameters() { }
 };
 
+/// \brief uniquify the output file name
+/// \details This function will tag on the MPI task number to the end of the file name
+/// to avoid collisions when running with multiple MPI tasks.
+/// \param fileName raw output file name
+/// \param createMultipleFiles if true need to append rankNum to the file name
+/// \param rankNum MPI group communicator rank number
+/// \param timeRankNum MPI time communicator rank number
+std::string uniquifyFileName(const std::string & fileName, const bool createMultipleFiles,
+                             const std::size_t rankNum, const int timeRankNum);
+
+/// \brief form a file suffix based on MPI task numbers
+/// \param createMultipleFiles if true need to append rankNum to the file name
+/// \param rankNum MPI group communicator rank number
+/// \param timeRankNum MPI time communicator rank number
+std::string formFileSuffixFromRankNums(const bool createMultipleFiles,
+                                       const std::size_t rankNum, const int timeRankNum);
+
+/// \brief form a file with path by combining the given directory and file name
+/// \details This function forms a new file path using the given directory and the
+/// basename from a given file name (which can include a path)
+/// \param newDirectory path to the destination directory
+/// \param fileName file name, which can include a directory path (which gets replaced)
+std::string formFileWithPath(const std::string & newDirectory, const std::string & fileName);
+
+/// \brief replace the file extension with a given new file extension
+/// \details This function forms a new file name where that file name's extension is replaced
+/// with a new given file extension. If the input file name does not contain an extension,
+/// then the new given extension is appended to the file name.
+/// \param fileName file name
+/// \param newExtension new extension for file name
+std::string formFileWithNewExtension(const std::string & fileName,
+                                     const std::string & newExtension);
+
+/// @brief form a new file name by inserting a suffix
+/// @details This function will form a new file name by inserting the given suffix
+/// immediately before the file name's extension
+/// @param fileName file name
+/// @param fileSuffix suffix to attach to fileName
+std::string formFileWithSuffix(const std::string & fileName, const std::string & fileSuffix);
+
 /// \brief store generated data into an ObsGroup
 /// \param latVals vector of latitude values
 /// \param lonVals vector of longitude values
+/// \param vcoordType string specifying type of vertical coordinate to use
+/// \param vcoordVals vector of vertical coordinate values
 /// \param dts vector of time offsets (s) relative to \p epoch
 /// \param epoch (ISO 8601 string) relative to which datetimes are computed
 /// \param obsVarNames vector (string) of simulated variable names
+/// \param obsValues vector of observed values
 /// \param obsErrors vector of obs error estimates
 /// \param[out] obsGroup destination for the generated data
 void storeGenData(const std::vector<float> & latVals,
                   const std::vector<float> & lonVals,
+                  const std::string & vcoordType,
+                  const std::vector<float> & vcoordVals,
                   const std::vector<int64_t> & dts,
                   const std::string & epoch,
                   const std::vector<std::string> & obsVarNames,
+                  const std::vector<float> & obsValues,
                   const std::vector<float> & obsErrors,
                   ObsGroup &obsGroup);
 
@@ -107,10 +156,33 @@ void storeGenData(const std::vector<float> & latVals,
 /// \ingroup ioda_cxx_engines_pub
 IODA_DL Group constructFromCmdLine(int argc, char** argv, const std::string& defaultFilename);
 
+/// \brief create an eckit local configuration containing proper engine parameters
+/// \details This function creates a YAML engines configuration that is suitable for
+/// use with the EngineFactory functions. The purpose of this is to provide a utility
+/// that can be used to create a backend through the same process that the ioda reader
+/// and writer use. Placing this utility in the examples and tests will be more
+/// instructive on the proper way to use the Engine file io backends.
+/// \param fileType type of file, currently accepts "hdf5" or "odb".
+/// \param fileName name, including path, of file to read or write.
+/// \param mapFileName yaml containing variable number/name mappings (only for odb file)
+/// \param queryFileName yaml containing which varibles to use (only for odb file)
+/// \ingroup ioda_cxx_engines_pub
+IODA_DL eckit::LocalConfiguration constructFileBackendConfig(const std::string & fileType,
+                const std::string & fileName, const std::string & mapFileName = "",
+                const std::string & queryFileName = "", const std::string & odbType = "");
+
 /// \brief This is a simple factory style function that will instantiate a
 ///   different backend based on a given name an parameters.
 /// \ingroup ioda_cxx_engines_pub
 IODA_DL Group constructBackend(BackendNames name, BackendCreationParameters& params);
+
+/// \brief check to see if have read access to a file
+/// \param fileName path to file tested
+IODA_DL bool haveFileReadAccess(const std::string & fileName);
+
+/// \brief check to see if have write access to a directory
+/// \param dirName path to directory being tested
+IODA_DL bool haveDirRwxAccess(const std::string & dirName);
 
 /// stream operator
 IODA_DL std::ostream& operator<<(std::ostream& os, const BackendCreateModes& mode);

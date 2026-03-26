@@ -9,7 +9,7 @@
 #define CORE_OBSSPACE_F_H_
 
 #include "ioda/ObsSpace.h"
-#include "oops/base/Variables.h"
+#include "oops/base/ObsVariables.h"
 #include "oops/mpi/mpi.h"
 #include "oops/util/DateTime.h"
 
@@ -20,10 +20,10 @@
 namespace ioda {
 
 extern "C" {
-  const ObsSpace * obsspace_construct_f(const eckit::Configuration *, const util::DateTime *,
-                                        const util::DateTime *);
+  const ObsSpace * obsspace_construct_f(const eckit::Configuration *,
+                                        const eckit::LocalConfiguration *);
   void obsspace_destruct_f(ObsSpace *);
-  const oops::Variables * obsspace_obsvariables_f(const ObsSpace &);
+  const oops::ObsVariables * obsspace_obsvariables_f(const ObsSpace &);
   std::size_t obsspace_get_gnlocs_f(const ObsSpace &);
   std::size_t obsspace_get_nlocs_f(const ObsSpace &);
   std::size_t obsspace_get_nchans_f(const ObsSpace &);
@@ -54,6 +54,16 @@ extern "C" {
   void obsspace_get_real64_f(const ObsSpace &, const char *, const char *,
                              const std::size_t &, double*,
                              const std::size_t &, int*);
+
+  void obsspace_get_nd_int32_f(const ObsSpace &, const char *, const char *,
+                           const std::size_t &, int32_t*);
+  void obsspace_get_nd_int64_f(const ObsSpace &, const char *, const char *,
+                           const std::size_t &, int64_t*);
+  void obsspace_get_nd_real32_f(const ObsSpace &, const char *, const char *,
+                            const std::size_t &, float*);
+  void obsspace_get_nd_real64_f(const ObsSpace &, const char *, const char *,
+                            const std::size_t &, double*);
+
   void obsspace_get_datetime_f(const ObsSpace &, const char *, const char *,
                                const std::size_t &, int32_t*, int32_t*,
                                const std::size_t &, int*);
@@ -78,8 +88,8 @@ extern "C" {
                            const std::size_t &, bool*,
                            const std::size_t &, int*);
 
-  int obsspace_get_nlocs_dim_id_f();
-  int obsspace_get_nchans_dim_id_f();
+  int obsspace_get_location_dim_id_f();
+  int obsspace_get_channel_dim_id_f();
 }
 
 }  // namespace ioda

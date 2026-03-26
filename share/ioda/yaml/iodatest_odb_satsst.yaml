@@ -1,0 +1,20 @@
+where:
+  varno: [12,112]
+variables:
+- name: initial_obsvalue
+- name: lat
+- name: lon
+- name: receipt_time
+- name: receipt_date
+- name: satellite_identifier
+- name: satellite_instrument
+- name: sst_bias
+- name: std_dev
+- name: sst_quality
+- name: sst_algorithm_type
+- name: instrument_type
+- name: date
+- name: time
+- name: ops_obsgroup
+- name: varno
+- name: seqno

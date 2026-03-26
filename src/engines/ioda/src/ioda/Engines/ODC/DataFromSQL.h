@@ -20,6 +20,7 @@
 #include "ioda/ObsGroup.h"
 
 #include "oops/util/DateTime.h"
+#include "oops/util/missingValues.h"
 
 #include "unsupported/Eigen/CXX11/Tensor"
 
@@ -30,30 +31,33 @@ namespace ODC {
   // TODO(DJDavies2): Take these obsgroup and varno
   // definitions and encapsulate these into the YAML
   // file structure.
-  static constexpr int obsgroup_surface      = 1;
-  static constexpr int obsgroup_scatwind     = 2;
-  static constexpr int obsgroup_aircraft     = 4;
-  static constexpr int obsgroup_sonde        = 5;
-  static constexpr int obsgroup_atovs        = 7;
-  static constexpr int obsgroup_oceansound   = 11;
-  static constexpr int obsgroup_airs         = 16;
-  static constexpr int obsgroup_gnssro       = 18;
-  static constexpr int obsgroup_ssmis        = 19;
-  static constexpr int obsgroup_iasi         = 26;
-  static constexpr int obsgroup_seviriclr    = 27;
-  static constexpr int obsgroup_geocloud     = 28;
-  static constexpr int obsgroup_amsr         = 29;
-  static constexpr int obsgroup_abiclr       = 37;
-  static constexpr int obsgroup_atms         = 38;
-  static constexpr int obsgroup_cris         = 39;
-  static constexpr int obsgroup_surfacecloud = 42;
-  static constexpr int obsgroup_mwsfy3       = 44;
-  static constexpr int obsgroup_ahiclr       = 51;
-  static constexpr int obsgroup_mwri         = 55;
-  static constexpr int obsgroup_gmilow       = 56;
-  static constexpr int obsgroup_gmihigh      = 57;
-  static constexpr int obsgroup_sattcwv      = 58;
-  static constexpr int obsgroup_hiras        = 60;
+  static constexpr int obsgroup_surface        = 1;
+  static constexpr int obsgroup_scatwind       = 2;
+  static constexpr int obsgroup_aircraft       = 4;
+  static constexpr int obsgroup_sonde          = 5;
+  static constexpr int obsgroup_atovs          = 7;
+  static constexpr int obsgroup_oceansound     = 11;
+  static constexpr int obsgroup_airs           = 16;
+  static constexpr int obsgroup_gnssro         = 18;
+  static constexpr int obsgroup_ssmis          = 19;
+  static constexpr int obsgroup_amsub          = 20;
+  static constexpr int obsgroup_iasi           = 26;
+  static constexpr int obsgroup_seviriclr      = 27;
+  static constexpr int obsgroup_geocloud       = 28;
+  static constexpr int obsgroup_amsr           = 29;
+  static constexpr int obsgroup_abiclr         = 37;
+  static constexpr int obsgroup_atms           = 38;
+  static constexpr int obsgroup_cris           = 39;
+  static constexpr int obsgroup_surfacecloud   = 42;
+  static constexpr int obsgroup_mwsfy3         = 44;
+  static constexpr int obsgroup_ahiclr         = 51;
+  static constexpr int obsgroup_seviriasr      = 53;
+  static constexpr int obsgroup_mwri           = 55;
+  static constexpr int obsgroup_gmilow         = 56;
+  static constexpr int obsgroup_gmihigh        = 57;
+  static constexpr int obsgroup_sattcwv        = 58;
+  static constexpr int obsgroup_hiras          = 60;
+  static constexpr int obsgroup_scatwindchosen = 64;
 
   static constexpr int varno_dd                     = 111;
   static constexpr int varno_ff                     = 112;
@@ -67,6 +71,7 @@ namespace ODC {
   static constexpr int varno_rawbt_amsr_89ghz       = 267;
   static constexpr int varno_rawbt_mwts             = 274;
   static constexpr int varno_rawbt_mwhs             = 275;
+  static constexpr int varno_cloud_fraction_asr     = 295;
 
   static constexpr int odb_type_int      = 1;
   static constexpr int odb_type_real     = 2;
@@ -75,7 +80,7 @@ namespace ODC {
 
   static constexpr float odb_missing_float = -2147483648.0f;
   static constexpr int odb_missing_int = 2147483647;
-  static constexpr char* odb_missing_string = const_cast<char *>("*** MISSING ***");
+  static constexpr char* odb_missing_string = const_cast<char *>("MISSING*");
 
 class DataFromSQL {
 private:
@@ -118,11 +123,6 @@ private:
   /// \brief Populate structure with data from an sql
   /// \param sql The SQL string to generate the data for the structure
   void setData(const std::string& sql);
-
-  /// \brief Append a new value to a particular column
-  /// \param column Column to append data to
-  /// \param value  Value to append
-  void appendData(size_t column, double value);
 
   /// \brief Returns the number of rows for a particular varno
   /// \param varno The varno to check
@@ -201,7 +201,7 @@ public:
   size_t numberOfMetadataRows() const;
 
   /// \brief Returns the dimensions for the ODB
-  NewDimensionScales_t getVertcos() const;
+  NewDimensionScales_t getVertcos(const int varno) const;
 
   /// \brief Populate structure with data from specified columns, file and varnos
   /// \param columns List of columns to extract
@@ -217,7 +217,12 @@ public:
   std::vector<int64_t> getDates(std::string const& date_col,
                                 std::string const& time_col,
                                 util::DateTime const& epoch,
-                                int64_t const missingInt64) const;
+                                int64_t const missingInt64,
+                                util::DateTime const timeWindowStart =
+                                util::missingValue<util::DateTime>(),
+                                util::DateTime const timeWindowExtendedLowerBound =
+                                util::missingValue<util::DateTime>(),
+                                std::string const& time_disp_col = "") const;
 
   /// \brief Returns a vector of station IDs
   std::vector<std::string> getStationIDs() const;
@@ -241,7 +246,8 @@ public:
       ioda::ObsGroup og, const ioda::VariableCreationParameters &params) const;
 
   /// \brief Returns a list of channels associated with a particular varno.
-  ioda::Variable assignChannelNumbers(int varno, ioda::ObsGroup og) const;
+  ioda::Variable assignChannelNumbers(int varno, ioda::ObsGroup og,
+                                      const std::string &vertcoName = "initial_vertco_reference") const;
 
   /// \brief Returns a list of channels associated with a particular varno.
   ioda::Variable assignChannelNumbersSeq(const std::vector<int> varnos, const ioda::ObsGroup og) const;
@@ -249,7 +255,8 @@ public:
   /// \brief Creates an ioda variable for a specified column
   void createVarnoDependentIodaVariable(std::string const &column, int varno,
                                         ioda::ObsGroup og,
-                                        const VariableCreationParameters &params) const;
+                                        const VariableCreationParameters &params,
+                                        const std::string &varname = "") const;
 
   /// \brief Converts specified varno-dependent bitfield column members into ioda variables
   /// containing the values from rows with a specified varno
