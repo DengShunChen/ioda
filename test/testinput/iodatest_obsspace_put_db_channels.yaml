@@ -1,13 +1,12 @@
 ---
-time window:
-  begin: "2018-04-14T21:00:00Z"
-  end: "2018-04-15T03:00:00Z"
+window begin: "2018-04-14T21:00:00Z"
+window end: "2018-04-15T03:00:00Z"
 
 observations:
 
 - obs space:
     name: "AMSUA NOAA19"
-    simulated variables: ['brightnessTemperature']
+    simulated variables: ['brightness_temperature']
     channels: 1,2,4,5
     obsdatain:
       engine:
@@ -28,8 +27,8 @@ observations:
 
 - obs space:
     name: "Radiosonde"
-    simulated variables: ['airTemperature']
-    observed variables: ['airTemperature']
+    simulated variables: ['temperature']
+    observed variables: ['temperature']
     obsdatain:
       engine:
         type: H5File

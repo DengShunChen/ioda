@@ -1,12 +1,11 @@
 ---
-time window:
-  begin: '2018-04-14T21:00:00Z'
-  end: '2018-04-15T03:00:00Z'
+window begin: '2018-04-14T21:00:00Z'
+window end: '2018-04-15T03:00:00Z'
 observations:
 - obs space:
     name: "Radiosonde_1var"
     simulated variables:
-    - airTemperature
+    - air_temperature
     obsdatain:
       engine:
         type: H5File
@@ -27,8 +26,8 @@ observations:
 - obs space:
     name: "Radiosonde_2vars"
     simulated variables:
-    - airTemperature
-    - specificHumidity
+    - air_temperature
+    - specific_humidity
     obsdatain:
       engine:
         type: H5File
@@ -45,10 +44,10 @@ observations:
 - obs space:
     name: "Radiosonde_4vars"
     simulated variables:
-    - airTemperature
-    - specificHumidity
-    - windEastward
-    - windNorthward
+    - air_temperature
+    - specific_humidity
+    - eastward_wind
+    - northward_wind
     obsdatain:
       engine:
         type: H5File

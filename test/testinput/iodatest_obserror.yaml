@@ -1,12 +1,11 @@
 ---
-time window:
-  begin: '2018-04-14T21:00:00Z'
-  end: '2018-04-15T03:00:00Z'
+window begin: '2018-04-14T21:00:00Z'
+window end: '2018-04-15T03:00:00Z'
 observations:
 - obs space:
     name: Radiance (1 channel)
-    simulated variables: [brightnessTemperature_1]
-    observed variables: [brightnessTemperature_1]
+    simulated variables: [brightness_temperature_1]
+    observed variables: [brightness_temperature_1]
     obsdatain:
       engine:
         type: H5File
@@ -16,7 +15,7 @@ observations:
 
 - obs space:
     name: Radiance
-    simulated variables: [brightnessTemperature]
+    simulated variables: [brightness_temperature]
     channels: 1-7, 15
     obsdatain:
       engine:

@@ -16,7 +16,7 @@
 import os
 import sys
 
-from pyioda import ioda
+import ioda
 # TODO: Uncomment once we are sure that numpy is a required dependency!
 #import numpy # numpy is very useful when handling multidimensional data.
 

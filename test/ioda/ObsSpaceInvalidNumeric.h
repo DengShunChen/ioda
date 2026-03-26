@@ -53,16 +53,18 @@ class ObsSpaceTestFixture : private boost::noncopyable {
   }
 
   ObsSpaceTestFixture(): ospaces_() {
-    const util::TimeWindow timeWindow
-      (::test::TestEnvironment::config().getSubConfiguration("time window"));
+    util::DateTime bgn(::test::TestEnvironment::config().getString("window begin"));
+    util::DateTime end(::test::TestEnvironment::config().getString("window end"));
 
     std::vector<eckit::LocalConfiguration> conf;
     ::test::TestEnvironment::config().get("observations", conf);
 
     for (std::size_t jj = 0; jj < conf.size(); ++jj) {
       eckit::LocalConfiguration obsconf(conf[jj], "obs space");
-      boost::shared_ptr<ioda::ObsSpace> tmp(new ioda::ObsSpace(obsconf, oops::mpi::world(),
-                                                               timeWindow, oops::mpi::myself()));
+      ioda::ObsTopLevelParameters obsparams;
+      obsparams.validateAndDeserialize(obsconf);
+      boost::shared_ptr<ioda::ObsSpace> tmp(new ioda::ObsSpace(obsparams, oops::mpi::world(),
+                                                               bgn, end, oops::mpi::myself()));
       ospaces_.push_back(tmp);
     }
   }

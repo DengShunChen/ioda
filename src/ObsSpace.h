@@ -28,14 +28,12 @@
 #include <utility>
 #include <vector>
 
-#include "eckit/config/LocalConfiguration.h"
 #include "eckit/mpi/Comm.h"
 
 #include "oops/base/ObsSpaceBase.h"
-#include "oops/base/ObsVariables.h"
+#include "oops/base/Variables.h"
 #include "oops/util/DateTime.h"
 #include "oops/util/Logger.h"
-#include "oops/util/TimeWindow.h"
 #include "ioda/core/IodaUtils.h"
 #include "ioda/distribution/Distribution.h"
 #include "ioda/Misc/Dimensions.h"
@@ -50,74 +48,13 @@ namespace eckit {
 }
 
 namespace ioda {
+    class ObsFrameRead;
     class ObsVector;
-
-    //-------------------------------------------------------------------------------------
-    struct ObsSourceStats {
-      /// \brief total number of locations from the input source (file or generator)
-      std::size_t nlocs;
-
-      /// \brief total number of locations from the input source (file or generator)
-      std::size_t nchans;
-
-      /// \brief total number of locations from the input source (file or generator)
-      std::size_t sourceNlocs;
-
-      /// \brief total number of locations across all MPI tasks
-      std::size_t gNlocs;
-
-      /// \brief number of nlocs from the obs source that are outside the time window
-      std::size_t gNlocsOutsideTimewindow;
-
-      /// \brief number of nlocs from the obs source that are outside the time window
-      std::size_t gNlocsRejectQc;
-
-      /// \brief number of records
-      std::size_t nrecs;
-
-      /// \brief indexes of locations to extract from the input obs file
-      std::vector<std::size_t> locIndices;
-
-      /// \brief record numbers associated with the location indexes
-      std::vector<std::size_t> recNums;
-    };
-
-    //-------------------------------------------------------------------------------------
-    /// Enum type for compare actions
-    enum class CompareAction {
-        Equal,
-        NotEqual,
-        GreaterThan,
-        LessThan,
-        GreaterThanOrEqual,
-        LessThanOrEqual
-    };
-
-    // override the << operator for compare actions
-    inline std::ostream & operator << (std::ostream & os, const CompareAction compareAction) {
-        std::string compareActionString;
-        if (compareAction == CompareAction::Equal) {
-            compareActionString = std::string("==");
-        } else if (compareAction == CompareAction::NotEqual) {
-            compareActionString = std::string("!=");
-        } else if (compareAction == CompareAction::GreaterThan) {
-            compareActionString = std::string(">");
-        } else if (compareAction == CompareAction::LessThan) {
-            compareActionString = std::string("<");
-        } else if (compareAction == CompareAction::GreaterThanOrEqual) {
-            compareActionString = std::string(">=");
-        } else if (compareAction == CompareAction::LessThanOrEqual) {
-            compareActionString = std::string("<=");
-        }
-        os << "action(" << compareActionString << ")";
-        return os;
-    }
 
     //-------------------------------------------------------------------------------------
     /// Enum type for obs variable data types
     enum class ObsDtype {
         None,
-        Empty,   // special marker for empty obs space
         Float,
         Integer,
         Integer_64,
@@ -127,12 +64,12 @@ namespace ioda {
     };
 
     /// \brief Enum type for obs dimension ids
-    /// \details The first two dimension names for now are Location and Channel. This will
+    /// \details The first two dimension names for now are nlocs and nchans. This will
     /// likely expand in the future, so make sure that this enum class and the following
     /// initializer function stay in sync.
     enum class ObsDimensionId {
-        Location,
-        Channel
+        Nlocs,
+        Nchans
     };
 
     /// \brief Wrapper class that maps dimension ids to names.
@@ -175,17 +112,6 @@ namespace ioda {
       typedef float to_type;
     };
 
-    /// \brief Base class for data structures associated with ObsSpace.
-    /// \details The  associated data structure change their state (e.g. reduce or append)
-    /// when ObsSpace changes its state. ObsSpaceAssociated is equivalent to Observer
-    /// in the Observer pattern (don't confuse with oops::Observer!)
-    class ObsSpaceAssociated {
-     public:
-      virtual ~ObsSpaceAssociated() = default;
-      virtual void reduce(const std::vector<bool> & keepLocs) = 0;
-      virtual void append() = 0;
-    };
-
     /// \brief Observation data class for IODA
     ///
     /// \details This class handles the memory store of observation data. It handles
@@ -220,9 +146,9 @@ namespace ioda {
         /// \param bgn DateTime object holding the start of the DA timing window
         /// \param end DateTime object holding the end of the DA timing window
         /// \param timeComm MPI communicator for ensemble
-        ObsSpace(const eckit::Configuration &, const eckit::mpi::Comm & comm,
-                 const util::TimeWindow timeWindow,
-                 const eckit::mpi::Comm & timeComm);
+        ObsSpace(const Parameters_ & params, const eckit::mpi::Comm & comm,
+                const util::DateTime & bgn, const util::DateTime & end,
+                const eckit::mpi::Comm & timeComm);
         ObsSpace(const ObsSpace &);
         virtual ~ObsSpace() {}
 
@@ -230,14 +156,14 @@ namespace ioda {
         /// @name Constructor-defined parameters
         /// @{
 
-        const util::TimeWindow & timeWindow() const {return timeWindow_;}
+        /// \details This method will return the start of the DA timing window
+        const util::DateTime & windowStart() const {return winbgn_;}
+
+        /// \details This method will return the end of the DA timing window
+        const util::DateTime & windowEnd() const {return winend_;}
 
         /// \details This method will return the associated MPI communicator
         const eckit::mpi::Comm & comm() const {return commMPI_;}
-
-        /// \details This method will return the associated MPI communicator in
-        ///          time (for the 4DEnVar and weak-constraint 4DVar applications)
-        const eckit::mpi::Comm & commTime() const {return commTime_;}
 
         /// \details This method will return the associated parameters
         const ObsSpaceParameters & params() const {return obs_params_;}
@@ -266,36 +192,21 @@ namespace ioda {
         /// @name General querying functions
         /// @{
 
-        /// \brief true if obs space is empty (ie, zero locations in the input source)
-        bool empty() const {return (source_nlocs_ == 0);}
-
-        /// \brief return the total nubmer of locations from the obs source (input file
-        ///  or generator)
-        /// \details Note that this value includes the additional number of locations due to
-        ///  extending the obs space
-        std::size_t sourceNumLocs() const {return source_nlocs_;}
-
         /// \brief return the total number of locations in the corresponding obs spaces
-        ///  across all MPI tasks
-        /// \details Note that this value includes the additional number of locations due to
-        ///  extending the obs space
+        ///        across all MPI tasks
         std::size_t globalNumLocs() const {return gnlocs_;}
 
         /// \brief return number of locations from obs source that were outside the time window
         std::size_t globalNumLocsOutsideTimeWindow() const {return gnlocs_outside_timewindow_;}
 
-        /// \brief return number of locations from obs source that were rejected by the
-        ///  quality checks
-        std::size_t globalNumLocsRejectQC() const {return gnlocs_reject_qc_;}
-
         /// \brief return the number of locations in the obs space.
         /// Note that nlocs may be smaller than global unique nlocs due to distribution of obs
         /// across multiple process elements.
-        inline size_t nlocs() const { return get_dim_size(ObsDimensionId::Location); }
+        inline size_t nlocs() const { return get_dim_size(ObsDimensionId::Nlocs); }
 
         /// \brief return the number of channels in the container. If this is not a radiance
         /// obs type, then this will return zero.
-        inline size_t nchans() const { return get_dim_size(ObsDimensionId::Channel); }
+        inline size_t nchans() const { return get_dim_size(ObsDimensionId::Nchans); }
 
         /// \brief return the number of records in the obs space container
         /// \details This is the number of sets of locations after applying the
@@ -350,12 +261,6 @@ namespace ioda {
         /// ObsSpace object -- i.e. those that were selected by the timing window filter
         /// and the MPI distribution.
         ///
-        /// Note that the original indices from the input file can range from 0 to
-        /// sourceNumLocs() - 1, so care must be taken to allow for that range of index
-        /// values even when some of the original locations have been removed due to
-        /// the timing window filtering and/or missing values in the dateTime, latitude,
-        /// or longitude values.
-        ///
         /// Example 1: Suppose the RoundRobin distribution is used and and there are two
         /// MPI tasks (ranks 0 and 1). The even-numbered locations from the file will go
         /// to rank 0, and the odd-numbered locations will go to rank 1. This means that
@@ -384,20 +289,30 @@ namespace ioda {
 
         /// \brief return the collection of all variables to be processed
         /// (observed + derived variables)
-        const oops::ObsVariables & obsvariables() const {return obsvars_;}
+        const oops::Variables & obsvariables() const {return obsvars_;}
 
         /// \brief return the collection of observed variables loaded from the input file
-        const oops::ObsVariables & initial_obsvariables() const
+        const oops::Variables & initial_obsvariables() const
         { return initial_obsvars_; }
 
         /// \brief return the collection of derived variables (variables computed
         /// after loading the input file)
-        const oops::ObsVariables & derived_obsvariables() const
+        const oops::Variables & derived_obsvariables() const
         { return derived_obsvars_; }
 
         /// \brief return the collection of simulated variables
-        const oops::ObsVariables & assimvariables() const
+        const oops::Variables & assimvariables() const
         { return assimvars_;}
+
+        /// @}
+        /// @name Functions to access the behind-the-scenes ObsGroup
+        /// @{
+
+        /// \brief return the ObsGroup that stores the data
+        inline ObsGroup getObsGroup() { return obs_group_; }
+
+        /// \brief return the ObsGroup that stores the data
+        inline const ObsGroup getObsGroup() const { return obs_group_; }
 
         /// @}
         /// @name IO functions
@@ -406,9 +321,8 @@ namespace ioda {
         /// \brief transfer data from the obs container to vdata
         ///
         /// \details The following get_db methods are the same except for the data type
-        /// of the data being transferred (integer, float, double, string, DateTime). Note
-        /// that get_db will resize the vdata (vector) arguement according to the size
-        /// of the variable in the obs container.
+        /// of the data being transferred (integer, float, double, string, DateTime). The
+        /// caller needs to allocate the memory that the vdata parameter points to
         ///
         /// \param group Name of container group (ObsValue, ObsError, MetaData, etc.)
         /// \param name  Name of container variable
@@ -459,25 +373,25 @@ namespace ioda {
         /// \param dimList Vector of dimension names (for creating variable if needed)
         void put_db(const std::string & group, const std::string & name,
                     const std::vector<int> & vdata,
-                    const std::vector<std::string> & dimList = { "Location" });
+                    const std::vector<std::string> & dimList = { "nlocs" });
         void put_db(const std::string & group, const std::string & name,
                     const std::vector<int64_t> & vdata,
-                    const std::vector<std::string> & dimList = { "Location" });
+                    const std::vector<std::string> & dimList = { "nlocs" });
         void put_db(const std::string & group, const std::string & name,
                     const std::vector<float> & vdata,
-                    const std::vector<std::string> & dimList = { "Location" });
+                    const std::vector<std::string> & dimList = { "nlocs" });
         void put_db(const std::string & group, const std::string & name,
                     const std::vector<double> & vdata,
-                    const std::vector<std::string> & dimList = { "Location" });
+                    const std::vector<std::string> & dimList = { "nlocs" });
         void put_db(const std::string & group, const std::string & name,
                     const std::vector<std::string> & vdata,
-                    const std::vector<std::string> & dimList = { "Location" });
+                    const std::vector<std::string> & dimList = { "nlocs" });
         void put_db(const std::string & group, const std::string & name,
                     const std::vector<util::DateTime> & vdata,
-                    const std::vector<std::string> & dimList = { "Location" });
+                    const std::vector<std::string> & dimList = { "nlocs" });
         void put_db(const std::string & group, const std::string & name,
                     const std::vector<bool> & vdata,
-                    const std::vector<std::string> & dimList = { "Location" });
+                    const std::vector<std::string> & dimList = { "nlocs" });
 
         /// @}
         /// @name Record index and sorting functions
@@ -512,83 +426,24 @@ namespace ioda {
         std::vector<std::size_t> recidx_all_recnums() const;
 
         /// @}
-        /// @name Resizing functions
-        /// @{
-
-        /// \brief Append new data to an existing ObsSpace
-        /// \details This function is given a directory path where it is expected that a
-        /// new file (matching the original file name used by the ObsSpace constructor)
-        /// exists that contains the obs data to be appended.
-        /// \param appendDir directory holding the file containing the new obs data
-        void append(const std::string & appendDir);
-
-        /// \brief Reduce obs space given a vector of int showing which values to remove
-        /// \details This function will use its input arguments to remove unwanted
-        /// values (along the Location dimension) from the obs space. It will also call
-        /// reduce method on all the existing data structures associated with this ObsSpace.
-        /// This is being done to help downstream operations run faster, eg the DA solver.
-        /// The idea is to keep all the corresponding locations in the checkValues vector
-        /// of which return true by applying the compare action along with the threshold.
-        /// \param compareAction enum type that defines how to compare the check values
-        /// with the threshold.
-        /// \param threshold limit being tested by the compare action
-        /// \param checkValues vector of QC values that are being tested with the compare action
-        void reduce(const ioda::CompareAction compareAction, const int threshold,
-                    const std::vector<int> & checkValues);
-
-        /// \brief Reduce obs space given a vector of bool showing which values to keep.
-        /// \details This function will use its input argument to remove unwanted
-        /// values (along the Location dimension) from the obs space. It will also call
-        /// reduce method on all the existing data structures associated with this ObsSpace.
-        /// This is being done to help downstream operations run faster, eg the DA solver.
-        void reduce(const std::vector<bool> & keepLocs);
-
-        /// \brief Registers a data structure associated with the current ObsSpace.
-        /// \details The associated data structures change their state (e.g. reduce or append) when
-        /// ObsSpace changes its state.
-        void attach(ObsSpaceAssociated & data) {
-          obs_space_associated_.push_back(std::ref(data));
-        }
-
-        /// \brief Un-registers a data structure that was associated with the current ObsSpace.
-        void detach(ObsSpaceAssociated & data) {
-          auto it = std::find_if(obs_space_associated_.begin(),
-                                 obs_space_associated_.end(),
-                                 [&](const auto& ref) {
-                                     return &ref.get() == &data;
-                                 });
-          if (it != obs_space_associated_.end()) {
-            obs_space_associated_.erase(it);
-          }
-        }
-
-
-        /// @}
 
 
      private:
         // ----------------------------- private data members ---------------------------
-        /// Time window class
-        const util::TimeWindow timeWindow_;
+        /// \brief Beginning of DA timing window
+        const util::DateTime winbgn_;
+
+        /// \brief End of DA timing window
+        const util::DateTime winend_;
 
         /// \brief MPI communicator
         const eckit::mpi::Comm & commMPI_;
 
-        /// \brief MPI communicator for time decomposition (used in 4DEnVar and weak-constraint
-        ///        4DVar)
-        const eckit::mpi::Comm & commTime_;
-
-        /// \brief total number of locations from the input source (file or generator)
-        std::size_t source_nlocs_;
-
-        /// \brief total number of locations across all MPI tasks
+        /// \brief total number of locations
         std::size_t gnlocs_;
 
         /// \brief number of nlocs from the obs source that are outside the time window
         std::size_t gnlocs_outside_timewindow_;
-
-        /// \brief number of nlocs from the obs source that are outside the time window
-        std::size_t gnlocs_reject_qc_;
 
         /// \brief number of records
         std::size_t nrecs_;
@@ -609,25 +464,22 @@ namespace ioda {
         /// \brief name of obs space
         std::string obsname_;
 
-        /// \brief When greater than zero print run stats (runtime, memory usage)
-        int print_run_stats_;
-
         /// \brief Initial observation variables to be processed (observations
         /// present in input file)
-        oops::ObsVariables initial_obsvars_;
+        oops::Variables initial_obsvars_;
 
         /// \brief Derived observation variables to be processed (variables computed
         /// after loading the input file)
-        oops::ObsVariables derived_obsvars_;
+        oops::Variables derived_obsvars_;
 
         /// \brief Observation variables to be processed
-        oops::ObsVariables obsvars_;
+        oops::Variables obsvars_;
 
         /// \brief Observation variables to be simulated
-        oops::ObsVariables assimvars_;
+        oops::Variables assimvars_;
 
         /// \brief MPI distribution object
-        std::shared_ptr<Distribution> dist_;
+        std::shared_ptr<const Distribution> dist_;
 
         /// \brief indexes of locations to extract from the input obs file
         std::vector<std::size_t> indx_;
@@ -641,11 +493,14 @@ namespace ioda {
         /// \brief indicator whether the data in recidx_ is sorted
         bool recidx_is_sorted_;
 
-        /// \brief all data structures currently associated with this ObsSpace.
-        /// \details This is used so associated data structures can change their state
-        ///          (e.g. reduce) when ObsSpace changes its state. ObsSpaceAssociated
-        ///          is Observer in the Observer pattern.
-        std::vector<std::reference_wrapper<ObsSpaceAssociated>> obs_space_associated_;
+        /// \brief map showing association of dim names with each variable name
+        VarUtils::VarDimMap dims_attached_to_vars_;
+
+        /// \brief cache for frontend selection
+        std::map<VarUtils::Vec_Named_Variable, Selection> known_fe_selections_;
+
+        /// \brief cache for backend selection
+        std::map<VarUtils::Vec_Named_Variable, Selection> known_be_selections_;
 
         /// \brief disable the "=" operator
         ObsSpace & operator= (const ObsSpace &) = delete;
@@ -655,37 +510,9 @@ namespace ioda {
         /// \param os output stream
         void print(std::ostream & os) const;
 
-        /// \brief transfer values from the indx_ data member to the Location variable
-        void assignLocationValues();
-
-        /// \brief load the obs space data from an obs source (file or generator)
-        /// \param backendConfig eckit::LocalConfiguration object for obs source backend
-        /// \param destObsGroup destination ObsGroup object
-        /// \param obsSourceStats struct holding counts, etc. that describe the contents
-        /// of the obs source
-        void load(const eckit::LocalConfiguration & backendConfig, ObsGroup & destObsGroup,
-                  ObsSourceStats & obsSourceStats);
-
-        /// \brief expand the obsdatain parameter to a vector of obsdatain configs
-        /// \details This function will take the obsdatain ObsDataInParameters object
-        /// from deserializing the original obsdatain spec, and construct a vector
-        /// of obsdatain configs where each elemnt is a copy of the obsdatain config
-        /// with the obsfile spec replaced with each file name in the list. The original
-        /// config can have either an obsfile (scalar) or obsfiles (vector), these both
-        /// default to empty values, and this routine simply concatenates obsfile and
-        /// obsfiles to form the vector obsdatain specs.
-        /// \param obsDataInParams parameters generated from original "obsdatain" config
-        std::vector<eckit::LocalConfiguration>
-            expandInputFileConfigs(const ObsDataInParameters & obsDataInParams);
-
-        /// \brief append the given ObsGroup and update the obs source stats
-        /// \details This function will append the given ObsGroup to the ObsSpace::obs_group_
-        /// data member. It will also update the obs suorce stats data members
-        /// (nlocs, gnlocs, etc.) from the given ObsSourceStats struct.
-        /// \param appendObsGroup ObsGroup to be appended to obs_group_
-        /// \param obsSourceStats struct holding counts, etc. that describe the contents
-        /// of the obs source
-        void appendObsGroup(ObsGroup & appendObsGroup, ObsSourceStats & obsSourceStats);
+        /// \brief Initialize the database from a source (ObsFrame ojbect)
+        /// \param obsFrame obs source object
+        void createObsGroupFromObsFrame(ObsFrameRead & obsFrame);
 
         /// \brief Extend the ObsSpace according to the method requested in
         ///  the configuration file.
@@ -696,19 +523,6 @@ namespace ioda {
         /// in the ObsError or DerivedObsError group, create one, fill it with missing values
         /// and add it to the DerivedObsError group.
         void createMissingObsErrors();
-
-        /// \brief For each simulated variable that has a derived error
-        /// (DerivedObsError group), fill the newly appended locations with
-        /// missing values
-        /// \param obsSourceStats struct holding counts, etc. that describe the contents
-        /// of the obs source
-        void appendMissingObsErrors(ObsSourceStats & obsSourceStats);
-
-        /// \brief build the recidx_ data member
-        /// \details Build the recidx_ data member using the indx_ and recnums_
-        /// data members. The entries of the map have each existing record number as
-        /// keys, and the values are the location indices that belong to that record.
-        void buildRecIdx();
 
         /// \brief Create the recidx data structure holding sorted record groups
         /// \details This method will construct a data structure that holds the
@@ -721,22 +535,44 @@ namespace ioda {
         /// any particular ordering of the record groups.
         void buildRecIdxUnsorted();
 
-        /// \brief resize along Location dimension
-        /// \param LocationSize new size to either append or reset
-        /// \param append when true append LocationSize to current size, otherwise reset size
-        void resizeLocation(const Dimensions_t LocationSize, const bool append);
+        /// \brief initialize the in-memory obs_group_ (ObsGroup) object from the ObsIo source
+        /// \param obsIo obs source object
+        void initFromObsSource(ObsFrameRead & obsFrame);
+
+        /// \brief resize along nlocs dimension
+        /// \param nlocsSize new size to either append or reset
+        /// \param append when true append nlocsSize to current size, otherwise reset size
+        void resizeNlocs(const Dimensions_t nlocsSize, const bool append);
+
+        /// \brief read in values for variable from obs source
+        /// \param obsFrame obs frame object
+        /// \param varName Name of variable in obs source object
+        /// \param varValues values for variable
+        template<typename VarType>
+        bool readObsSource(ObsFrameRead & obsFrame,
+                           const std::string & varName, std::vector<VarType> & varValues);
+
+        /// \brief store a variable in the obs_group_ object
+        /// \param obsIo obs source object
+        /// \param varName Name of obs_group_ variable for obs_group_ object
+        /// \param varValues Values for obs_group_ variable
+        /// \param frameStart is the start of the ObsFrame
+        /// \param frameCount is the size of the ObsFrame
+        template<typename VarType>
+        void storeVar(const std::string & varName, std::vector<VarType> & varValues,
+                      const Dimensions_t frameStart, const Dimensions_t frameCount);
 
         /// \brief get fill value for use in the obs_group_ object
         template<typename DataType>
         DataType getFillValue() {
-            DataType fillVal = util::missingValue<DataType>();
+            DataType fillVal = util::missingValue(fillVal);
             return fillVal;
         }
 
         /// \brief load a variable from the obs_group_ object
         /// \details This function will load data from the obs_group_ object into
         ///          the memory buffer (vector) varValues. The chanSelect parameter
-        ///          is only used when the variable is 2D radiance data (Location X Channel),
+        ///          is only used when the variable is 2D radiance data (nlocs X nchans),
         ///          and contains a list of channel numbers to be selected from the
         ///          obs_group_ variable.
         /// \param group Name of Group in obs_group_
@@ -759,26 +595,34 @@ namespace ioda {
         /// \param dimList Vector of dimension names (for creating variable if needed)
         ///
         /// If the group `group` does not contain a variable with the specified name, but this name
-        /// has the form <string>_<integer> and `obs_group_` contains an `Channel` dimension, this
+        /// has the form <string>_<integer> and `obs_group_` contains an `nchans` dimension, this
         /// function will save `varValues` in the slice of variable <string> corresponding to
         /// channel <integer>. If channel <integer> does not exist or the variable <string> already
-        /// exists but is not associated with the `Channel` dimension, an exception will be thrown.
+        /// exists but is not associated with the `nchans` dimension, an exception will be thrown.
         template<typename VarType>
         void saveVar(const std::string & group, std::string name,
                      const std::vector<VarType> & varValues,
                      const std::vector<std::string> & dimList);
 
         /// \brief Create selections of slices of the variable \p variable along dimension
-        /// \p ChannelDimIndex corresponding to channels \p channels.
+        /// \p nchansDimIndex corresponding to channels \p channels.
         ///
         /// \returns The number of elements in each selection.
         std::size_t createChannelSelections(const Variable & variable,
-                                            std::size_t ChannelDimIndex,
+                                            std::size_t nchansDimIndex,
                                             const std::vector<int> & channels,
                                             Selection & memSelect,
                                             Selection & obsGroupSelect) const;
 
-        /// \brief open an obs_group_ variable, create the variable if necessary
+        /// \brief create set of variables from source variables and lists
+        /// \param srcVarContainer Has_Variables object from source
+        /// \param destVarContainer Has_Variables object from destination
+        /// \param dimsAttachedToVars Map containing list of attached dims for each variable
+        void createVariables(const Has_Variables & srcVarContainer,
+                             Has_Variables & destVarContainer,
+                             const VarUtils::VarDimMap & dimsAttachedToVars);
+
+        /// \brief open an obs_group_ variable, create the varialbe if necessary
         template<typename VarType>
         Variable openCreateVar(const std::string & varName,
                                const std::vector<std::string> & varDimList) {
@@ -787,16 +631,9 @@ namespace ioda {
                 var = obs_group_.vars.open(varName);
             } else {
                 // Create a vector of the dimension variables
-                std::vector<ioda::Dimensions_t> chunkDims;
                 std::vector<Variable> varDims;
                 for (auto & dimName : varDimList) {
-                    Variable dimVar = obs_group_.vars.open(dimName);
-                    if (dimName == "Location") {
-                        chunkDims.push_back(VarUtils::getLocationChunkSize(gnlocs_));
-                    } else {
-                        chunkDims.push_back(dimVar.getDimensions().dimsCur[0]);
-                    }
-                    varDims.push_back(dimVar);
+                    varDims.push_back(obs_group_.vars.open(dimName));
                 }
 
                 // Create the variable. Use the JEDI internal missing value marks for
@@ -804,7 +641,6 @@ namespace ioda {
                 VarType fillVal = this->getFillValue<VarType>();
                 VariableCreationParameters params;
                 params.chunk = true;
-                params.setChunks(chunkDims);
                 params.compressWithGZIP();
                 params.setFillValue<VarType>(fillVal);
 
@@ -845,43 +681,6 @@ namespace ioda {
         ///        of the number of records in the original ObsSpace.
         template <typename DataType>
         void extendVariable(Variable & extendVar, const size_t upperBoundOnGlobalNumOriginalRecs);
-
-        /// \brief reduce variable data values according to input parameters
-        /// \param compareAction enum type that defines how to compare the check values
-        /// with the threshold.
-        /// \param threshold limit being tested by the compare action
-        /// \param checkValues vector of QC values that are being tested with the compare action
-        /// \param keepLocs boolean vector, true in entries where that location is kept
-        void generateLocationsToKeep(const CompareAction compareAction, const int threshold,
-                                     const std::vector<int> & checkValues,
-                                     std::vector<bool> & keepLocs);
-
-        /// \brief reduce variable data values according to input parameters
-        /// \return resulting number of locations from performing the reduction
-        /// \param keepLocs boolean vector, true in entries where that location is kept
-        std::size_t reduceVarDataValues(const std::vector<bool> & keepLocs);
-
-        /// \brief reduce variable data values in place
-        /// \details This function will reduce the data in varValues by removing the locations
-        /// corresponding to false values in the keepNlocs vector. The locations that are
-        /// being kept will be moved to the "left" in varValues so that varValues can
-        /// be resized to free the unused entries at the end of varValues.
-        /// \param keepLocs where true, keep the corresponding location index in varValues
-        /// \param varValues variable values that will be reduced in place
-        /// \param varShape vector holding the sizes of each dimension of the variable
-        /// \param doResize if true, resize the output VarValues vector (default is false)
-        /// \return resulting number of locations from performing the reduction
-        template <typename DataType>
-        std::size_t reduceVarDataInPlace(const std::vector<bool> & keepLocs,
-                                         const std::vector<Dimensions_t> & varShape,
-                                         std::vector<DataType> & varValues,
-                                         const bool doResize = false);
-
-        /// \brief adjust data members after reduction
-        /// \details This function will adjust the data members affected by the removal
-        /// of locations from the data.
-        /// \param keepLocs boolean vector, true in entries where that location is kept
-        void adjustDataMembersAfterReduce(const std::vector<bool> & keepLocs);
     };
 
 }  // namespace ioda

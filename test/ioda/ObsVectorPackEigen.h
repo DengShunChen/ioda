@@ -43,12 +43,14 @@ namespace test {
 void testPackEigen() {
   std::vector<eckit::LocalConfiguration> conf;
   ::test::TestEnvironment::config().get("observations", conf);
-  const util::TimeWindow timeWindow
-    (::test::TestEnvironment::config().getSubConfiguration("time window"));
+  util::DateTime bgn((::test::TestEnvironment::config().getString("window begin")));
+  util::DateTime end((::test::TestEnvironment::config().getString("window end")));
 
   for (std::size_t jj = 0; jj < conf.size(); ++jj) {
      eckit::LocalConfiguration obsconf(conf[jj], "obs space");
-     ioda::ObsSpace obsdb(obsconf, oops::mpi::world(), timeWindow, oops::mpi::myself());
+     ioda::ObsTopLevelParameters obsparams;
+     obsparams.validateAndDeserialize(obsconf);
+     ioda::ObsSpace obsdb(obsparams, oops::mpi::world(), bgn, end, oops::mpi::myself());
 
      const size_t rank = obsdb.distribution()->rank();
      ioda::ObsVector obsvec(obsdb, "ObsValue");

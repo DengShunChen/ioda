@@ -31,8 +31,6 @@ class HaloDistributionParameters : public DistributionParametersBase {
   oops::OptionalParameter<std::vector<double>> center{"center", this};
   oops::Parameter<double> radius{"radius", 50000000.0, this};
   oops::RequiredParameter<double> haloSize{"halo size", "halo size [m]", this};
-  // Optional batching to improve robustness/performance of minloc allReduce on large vectors
-  oops::Parameter<std::size_t> allreduceBatchSize{"allreduce batch size", 0, this};
 };
 
 
@@ -154,8 +152,6 @@ class Halo: public Distribution {
      const double radius_earth_ = 6.371e6;
      // dist name
      const std::string distName_ = "Halo";
-     // Optional: number of elements per batch for allReduce(minloc); 0 disables batching
-     std::size_t allreduceBatchSize_ = 0;
 };
 
 }  // namespace ioda

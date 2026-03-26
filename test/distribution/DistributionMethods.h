@@ -168,6 +168,7 @@ void testDistributionMethods() {
   eckit::LocalConfiguration conf(::test::TestEnvironment::config());
 
   const eckit::mpi::Comm & MpiComm = oops::mpi::world();
+  const std::size_t MyRank = MpiComm.rank();
   const std::size_t nprocs = MpiComm.size();
 
   std::vector<eckit::LocalConfiguration> dist_types;

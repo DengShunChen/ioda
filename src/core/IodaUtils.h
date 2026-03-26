@@ -8,7 +8,6 @@
 #ifndef CORE_IODAUTILS_H_
 #define CORE_IODAUTILS_H_
 
-#include <fstream>
 #include <map>
 #include <string>
 #include <typeinfo>
@@ -65,12 +64,10 @@ namespace ioda {
   /// \brief open or create an epoch style datetime variable
   /// \param groupName name of group in which to open or create variable
   /// \param varName name of variable to open or create
-  /// \param globalNlocs total number of locations across all MPI tasks
   /// \param newEpoch DateTime object used for the epoch if creating a new variable
   /// \param epochDtVar requested datetime variable
   /// \param destVarContainer Has_Variables object in which to open/create the variable
   void openCreateEpochDtimeVar(const std::string & groupName, const std::string & varName,
-                               const std::size_t globalNlocs,
                                const util::DateTime & newEpoch, Variable & epochDtVar,
                                Has_Variables & destVarContainer);
 
@@ -119,10 +116,6 @@ namespace ioda {
   /// \param varName new format variable name
   std::string convertNewVnameToOldVname(const std::string & varName);
 
-  /// \brief check if a file exists and return true if it does
-  /// \param filePathToCheck
-  bool checkFileExists(const std::string & filePathToCheck);
-
   // -----------------------------------------------------------------------------
   /*!
    * \details This method will perform numeric data type conversions. This method is aware
@@ -140,8 +133,8 @@ namespace ioda {
 
     std::string FromTypeName = TypeIdName(typeid(FromType));
     std::string ToTypeName = TypeIdName(typeid(ToType));
-    const FromType FromMiss = util::missingValue<FromType>();
-    const ToType ToMiss = util::missingValue<ToType>();
+    const FromType FromMiss = util::missingValue(FromMiss);
+    const ToType ToMiss = util::missingValue(ToMiss);
 
     // In any type change, the missing values need to be switched.
     //

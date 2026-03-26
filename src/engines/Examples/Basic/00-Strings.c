@@ -7,55 +7,46 @@
 /** \file 00-Strings.c
  *  \brief Demonstrates ioda's C string functions.
  **/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ioda/C/ioda_decls.hpp"
-#include "ioda/C/cxx_string.hpp"
+#include "ioda/C/ioda_c.h"
+#include "ioda/C/String_c.h"
 
 int main()
 {
-	char * buf;
-	const char* test1 = "This ";
-	const char* test2 = "is a test.";
+	size_t ret = 0;
+	char buf[50];
+	const size_t buf_sz = sizeof(buf);
+	memset(buf, 0, buf_sz);
+
 	const char* test_str = "This is a test.";
-	int64_t sz;
-	
-	cxx_string_t s = cxx_string_c_alloc();
-	
-	// set and get a string
-	cxx_string_c_set(s,test_str);
-	buf = cxx_string_c_get(s);
-         
-        if (strlen(buf) != strlen(test_str) || strcmp(test_str,buf)!= 0) {
-		fprintf(stderr," errpr lone %d test fsiled\n",__LINE__);
-		cxx_string_c_dealloc(s);
-		return -1;
-        }
-        printf(" %s  =? %s\n",buf,test_str);
-        free(buf);
-        
-        cxx_string_c_clear(s);
 
-        sz = cxx_string_c_size((void*)s);
-        
-        if (sz!=0) {
-	    fprintf(stderr,"ioda_string_c_size or clear fun failed\n");
-	    cxx_string_c_dealloc(s);
-	    return -1;
-        }
+	const struct ioda_c_interface* ioda  = get_ioda_c_interface();
 
-	cxx_string_c_set(s,test1);
-	cxx_string_c_append(s,test2);
-	buf = cxx_string_c_get(s);
-        
-        if ( strcmp(buf,test_str)!=0) {
-           fprintf(stderr,"ioda_c_string_append does not work %s != %s\n",buf,test_str);
-           free(buf);
-           cxx_string_c_dealloc(s);
-           return -1;
-        }
-        fprintf(stderr,"done success\n");
-        cxx_string_c_dealloc(&s);
-	return EXIT_SUCCESS;
+	// Set and get a string.
+	struct ioda_string* s = ioda->Strings->construct();
+	if (!s->set(s, test_str, strlen(test_str))) goto failure;
+	if ((ret = s->get(s, buf, buf_sz)) != strlen(test_str)) goto failure;
+	printf("%s\n", buf);
+
+	// Test truncation when getting.
+	if ((ret = s->get(s,buf,5)) != 5) goto failure;
+	// buf would be "This"
+	if (strlen(buf) != 4) goto failure;
+
+	// Test string copy
+	struct ioda_string *s_copy = s->copy(s);
+	if (s_copy->size(s) != s->size(s)) goto failure;
+
+	// Clear a string and check length.
+	s->clear(s);
+	if (s->length(s) != 0) goto failure;
+
+	return 0;
+
+failure:
+	printf("Test failed. Buf is \"%s\".\n", buf);
+	return 1;
 }

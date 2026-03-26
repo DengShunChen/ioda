@@ -67,9 +67,6 @@ Halo::Halo(const eckit::mpi::Comm & Comm,
 
   radius_ += haloSize;
 
-  // Optional batching size for robust allReduce(minloc) on large vectors
-  allreduceBatchSize_ = params.allreduceBatchSize;
-
   oops::Log::debug() << "Halo constructed: center: " << center_ << " radius: "
                      << radius_ << " haloSize: " << haloSize << std::endl;
 }
@@ -91,6 +88,8 @@ void Halo::assignRecord(const std::size_t RecNum, const std::size_t LocNum,
     // This is the first location from this record. Find out whether to assign it to this PE.
 
     const double dist = eckit::geometry::Sphere::distance(radius_earth_, center_, point);
+    oops::Log::debug() << "Point: " << point << " distance to center: " << center_
+          << " = " << dist << std::endl;
     if (dist <= radius_) {
       // Yes!
       recordsInHalo_.insert(RecNum);
@@ -145,36 +144,14 @@ void Halo::computePatchLocs() {
     }
 
     // use reduce operation to find PE rank with minimal distance
-    oops::Log::debug() << "MPI allReduce 開始: 數據大小=" << dist_and_lidx_loc.size()
-                      << " elements, 總大小=" << (dist_and_lidx_loc.size() * sizeof(std::pair<double, int>))
-                      << " bytes, 批次大小=" << allreduceBatchSize_ << std::endl;
-
-    if (allreduceBatchSize_ == 0 || allreduceBatchSize_ >= dist_and_lidx_loc.size()) {
-      // Single-shot (legacy behavior)
-      comm_.allReduce(dist_and_lidx_loc, dist_and_lidx_glb, eckit::mpi::minloc());
-    } else {
-      // Batched allReduce with identical semantics to single-shot
-      const size_t total = dist_and_lidx_loc.size();
-      const size_t batchSize = std::max(static_cast<size_t>(1), allreduceBatchSize_);
-      const size_t numBatches = (total + batchSize - 1) / batchSize;
-      for (size_t b = 0; b < numBatches; ++b) {
-        const size_t start = b * batchSize;
-        const size_t end = std::min(start + batchSize, total);
-        const size_t thisBatch = end - start;
-        std::vector<std::pair<double, int>> locBatch(thisBatch);
-        std::vector<std::pair<double, int>> glbBatch(thisBatch);
-        for (size_t i = 0; i < thisBatch; ++i) locBatch[i] = dist_and_lidx_loc[start + i];
-        comm_.allReduce(locBatch, glbBatch, eckit::mpi::minloc());
-        for (size_t i = 0; i < thisBatch; ++i) dist_and_lidx_glb[start + i] = glbBatch[i];
-      }
-    }
+    comm_.allReduce(dist_and_lidx_loc, dist_and_lidx_glb, eckit::mpi::minloc());
 
     // ids of patch observations owned by this PE
     std::unordered_set<std::size_t> patchObsLoc;
 
     // if this PE has the minimum distance then this PE owns this ob. as patch
     for (auto i : haloLocVector_) {
-      if (static_cast<size_t>(dist_and_lidx_glb[i].second) == myRank) {
+      if ( dist_and_lidx_glb[i].second == myRank ) {
         patchObsLoc.insert(i);
       }
     }
@@ -193,27 +170,15 @@ void Halo::computePatchLocs() {
     oops::Log::debug() << "patchObsBool_.size(): " << patchObsBool_.size() << std::endl;
 
     // now that we have patchObsBool_ computed we can free memory occupied by some temp objects
-    oops::Log::debug() << "recordDistancesFromCenter_.clear() start" << std::endl;
     recordDistancesFromCenter_.clear();
-    oops::Log::debug() << "recordDistancesFromCenter_.clear() done" << std::endl;
-    oops::Log::debug() << "haloLocRecords_.clear() start" << std::endl;
     haloLocRecords_.clear();
-    oops::Log::debug() << "haloLocRecords_.clear() done" << std::endl;
-    oops::Log::debug() << "haloLocRecords_.shrink_to_fit() start" << std::endl;
     haloLocRecords_.shrink_to_fit();
-    oops::Log::debug() << "haloLocRecords_.shrink_to_fit() done" << std::endl;
 
-    oops::Log::debug() << "computeGlobalUniqueConsecutiveLocIndices start" << std::endl;
     computeGlobalUniqueConsecutiveLocIndices(dist_and_lidx_glb);
-    oops::Log::debug() << "computeGlobalUniqueConsecutiveLocIndices done" << std::endl;
 
     // and now the remaining temp object
-    oops::Log::debug() << "haloLocVector_.clear() start" << std::endl;
     haloLocVector_.clear();
-    oops::Log::debug() << "haloLocVector_.clear() done" << std::endl;
-    oops::Log::debug() << "haloLocVector_.shrink_to_fit() start" << std::endl;
     haloLocVector_.shrink_to_fit();
-    oops::Log::debug() << "haloLocVector_.shrink_to_fit() done" << std::endl;
   }
 }
 
@@ -222,22 +187,15 @@ void Halo::computeGlobalUniqueConsecutiveLocIndices(
     const std::vector<std::pair<double, int>> &dist_and_lidx_glb) {
   const double inf = std::numeric_limits<double>::infinity();
 
-  oops::Log::debug() << "computeGlobalUniqueConsecutiveLocIndices start" << std::endl;
   globalUniqueConsecutiveLocIndices_.reserve(haloLocVector_.size());
-  oops::Log::debug() << "computeGlobalUniqueConsecutiveLocIndices done" << std::endl;
 
   // Step 0: enable quick checks of whether a location belongs to this rank's halo.
-  oops::Log::debug() << "haloLocSet start" << std::endl;
   std::unordered_set<size_t> haloLocSet(haloLocVector_.begin(), haloLocVector_.end());
-
 
   // Step 1: index patch observations owned by each rank consecutively (starting from 0 on each
   // rank). For each observation i held on this rank, set globalConsecutiveLocIndices_[i] to
   // the index of the corresponding patch observation on the rank that owns it.
-  oops::Log::debug() << "patchObsCountOnRank start" << std::endl;
   std::vector<size_t> patchObsCountOnRank(comm_.size(), 0);
-  oops::Log::debug() << "patchObsCountOnRank done" << std::endl;
-  oops::Log::debug() << "haloLocSet.find(gloc) != haloLocSet.end() start" << std::endl;
   for (size_t gloc = 0, nglocs = dist_and_lidx_glb.size(); gloc < nglocs; ++gloc) {
     if (dist_and_lidx_glb[gloc].first < inf) {
       // This obs is held on at least one rank (this won't be the case e.g. for observations
@@ -250,30 +208,24 @@ void Halo::computeGlobalUniqueConsecutiveLocIndices(
       ++patchObsCountOnRank[rankOwningPatchObs];
     }
   }
-  oops::Log::debug() << "haloLocSet.find(gloc) != haloLocSet.end() done" << std::endl;
 
   // Step 2: make indices of patch observations globally unique by incrementing the index
   // of each patch observation held by rank r by the total number of patch observations owned
   // by ranks r' < r.
 
   // Perform an exclusive scan
-  oops::Log::debug() << "patchObsCountOnPreviousRanks start" << std::endl;
   std::vector<size_t> patchObsCountOnPreviousRanks(patchObsCountOnRank.size(), 0);
-  oops::Log::debug() << "patchObsCountOnPreviousRanks done" << std::endl;
   for (size_t rank = 1; rank < patchObsCountOnRank.size(); ++rank) {
     patchObsCountOnPreviousRanks[rank] =
         patchObsCountOnPreviousRanks[rank - 1] + patchObsCountOnRank[rank - 1];
   }
-  oops::Log::debug() << "patchObsCountOnPreviousRanks done" << std::endl;
 
   // Increment patch observation indices
-  oops::Log::debug() << "globalUniqueConsecutiveLocIndices_.size() start" << std::endl;
   for (size_t loc = 0; loc < globalUniqueConsecutiveLocIndices_.size(); ++loc) {
     const size_t gloc = haloLocVector_[loc];
     const size_t rankOwningPatchObs = dist_and_lidx_glb[gloc].second;
     globalUniqueConsecutiveLocIndices_[loc] += patchObsCountOnPreviousRanks[rankOwningPatchObs];
   }
-  oops::Log::debug() << "globalUniqueConsecutiveLocIndices_.size() done" << std::endl;
 }
 
 // -----------------------------------------------------------------------------

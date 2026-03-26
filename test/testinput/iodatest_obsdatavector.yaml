@@ -1,8 +1,7 @@
 ---
 # Note: the first observation lies outside the window
-time window:
-  begin: "2018-04-14T21:00:00Z"
-  end: "2018-04-15T03:00:00Z"
+window begin: "2018-04-14T21:00:00Z"
+window end: "2018-04-15T03:00:00Z"
 
 obs space:
   name: Test

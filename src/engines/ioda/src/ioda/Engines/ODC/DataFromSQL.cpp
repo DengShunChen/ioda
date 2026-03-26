@@ -18,7 +18,6 @@
 
 #include "oops/util/Duration.h"
 #include "oops/util/Logger.h"
-#include "oops/util/missingValues.h"
 
 namespace ioda {
 namespace Engines {
@@ -40,7 +39,7 @@ DataFromSQL::DataFromSQL(int maxNumberChannels) : max_number_channels_(maxNumber
 size_t DataFromSQL::numberOfMetadataRows() const { return number_of_metadata_rows_; }
 
 int DataFromSQL::getColumnIndex(const std::string& col) const {
-  for (size_t i = 0; i < columns_.size(); i++) {
+  for (int i = 0; i < columns_.size(); i++) {
     if (columns_.at(i) == col) {
       return i;
     }
@@ -51,9 +50,9 @@ int DataFromSQL::getColumnIndex(const std::string& col) const {
 size_t DataFromSQL::numberOfRowsForVarno(const int varno) const {
   int varno_index = getColumnIndex("varno");
   size_t tot      = 0;
-  for (size_t i = 0; i < number_of_rows_; i++) {
+  for (int i = 0; i < number_of_rows_; i++) {
     size_t val = getData(i, varno_index);
-    if (val == static_cast<size_t>(varno)) {
+    if (val == varno) {
       tot++;
     }
   }
@@ -61,7 +60,7 @@ size_t DataFromSQL::numberOfRowsForVarno(const int varno) const {
 }
 
 bool DataFromSQL::hasVarno(const int varno) const {
-  for (size_t i = 0; i < number_of_varnos_; i++) {
+  for (int i = 0; i < number_of_varnos_; i++) {
     if (varno == varnos_.at(i)) return true;
   }
   return false;
@@ -69,26 +68,8 @@ bool DataFromSQL::hasVarno(const int varno) const {
 
 size_t DataFromSQL::numberOfLevels(const int varno) const {
   if (hasVarno(varno) && number_of_metadata_rows_ > 0) {
-    if (obsgroup_ == obsgroup_surfacecloud 
-        || obsgroup_ == obsgroup_seviriclr
-        || obsgroup_ == obsgroup_seviriasr) {
-      // At the Met Office two products called SEVIRIClr are
-      // used. One is used in the Global model, and the
-      // other in the UK local area model, UKV. These are from
-      // the same instrument, but are different products,
-      // so the processing is also different. Here, and in
-      // other places throughout, we need to identify each
-      // and process the associated varnos differently.
-      // We therefore make use of the fact that the Global product
-      // has a unique varno, 295, named here `varno_cloud_fraction_asr`
-      // to separate the processing.
-      // This has been named after the Global product MSGASR, and has
-      // nothing to do with the SEVIRIASR stream used in the UKV.
-      if (hasVarno(varno_cloud_fraction_asr)) {
-        return varnos_and_levels_to_use_.at(varno);
-      } else {
-        return varnos_and_levels_.at(varno);
-      }
+    if (obsgroup_ == obsgroup_surfacecloud) {
+      return varnos_and_levels_.at(varno);
     } else {
       return varnos_and_levels_to_use_.at(varno);
     }
@@ -125,8 +106,8 @@ void DataFromSQL::setData(const std::string& sql) {
   data_.resize(number_of_columns);
   for (auto &row : sodb) {
     ASSERT(row.columns().size() == number_of_columns);
-    for (size_t i = 0; i < number_of_columns; ++i) {
-      data_[i].push_back(static_cast<double>(row[i]));
+    for (size_t i = 0; i < number_of_columns; i++) {
+      appendData(i, row[i]);
     }
   }
 
@@ -136,55 +117,58 @@ void DataFromSQL::setData(const std::string& sql) {
   }
 }
 
+void DataFromSQL::appendData(size_t column, double value) {
+  data_.at(column).push_back(value);
+}
+
 int DataFromSQL::getColumnTypeByName(std::string const& column) const {
   return column_types_.at(getColumnIndex(column));
 }
 
-NewDimensionScales_t DataFromSQL::getVertcos(const int varno) const {
+NewDimensionScales_t DataFromSQL::getVertcos() const {
   NewDimensionScales_t vertcos;
   const int num_rows = number_of_metadata_rows_;
   vertcos.push_back(
-    NewDimensionScale<int>("Location", num_rows, num_rows, num_rows));
+    NewDimensionScale<int>("nlocs", num_rows, num_rows, num_rows));
   if (obsgroup_ == obsgroup_iasi || obsgroup_ == obsgroup_cris || obsgroup_ == obsgroup_hiras) {
-    const int number_of_levels = numberOfLevels(varno);
-    vertcos.push_back(NewDimensionScale<int>("Channel", number_of_levels,
+    int number_of_levels = numberOfLevels(varno_rawsca);
+    vertcos.push_back(NewDimensionScale<int>("nchans", number_of_levels,
                                              number_of_levels, number_of_levels));
   } else if (obsgroup_ == obsgroup_atovs) {
-    const int number_of_levels = numberOfLevels(varno_rawbt_amsu);
-    vertcos.push_back(NewDimensionScale<int>("Channel", number_of_levels,
+    int number_of_levels = numberOfLevels(varno_rawbt_amsu);
+    vertcos.push_back(NewDimensionScale<int>("nchans", number_of_levels,
                                              number_of_levels, number_of_levels));
   } else if (obsgroup_ == obsgroup_amsr) {
-    const int number_of_levels = numberOfLevels(varno_rawbt) + numberOfLevels(varno_rawbt_amsr_89ghz);
-    vertcos.push_back(NewDimensionScale<int>("Channel", number_of_levels,
+    int number_of_levels = numberOfLevels(varno_rawbt) + numberOfLevels(varno_rawbt_amsr_89ghz);
+    vertcos.push_back(NewDimensionScale<int>("nchans", number_of_levels,
                                              number_of_levels, number_of_levels));
   } else if (obsgroup_ == obsgroup_abiclr || obsgroup_ == obsgroup_ahiclr
              || obsgroup_ == obsgroup_airs || obsgroup_ == obsgroup_atms
              || obsgroup_ == obsgroup_gmihigh || obsgroup_ == obsgroup_gmilow
              || obsgroup_ == obsgroup_mwri || obsgroup_ == obsgroup_seviriclr
-             || obsgroup_ == obsgroup_amsub || obsgroup_ == obsgroup_seviriasr
              || obsgroup_ == obsgroup_ssmis) {
-    const int number_of_levels = numberOfLevels(varno_rawbt);
-    vertcos.push_back(NewDimensionScale<int>("Channel", number_of_levels,
+    int number_of_levels = numberOfLevels(varno_rawbt);
+    vertcos.push_back(NewDimensionScale<int>("nchans", number_of_levels,
                                              number_of_levels, number_of_levels));
   } else if (obsgroup_ == obsgroup_mwsfy3) {
-    const int number_of_levels = numberOfLevels(varno_rawbt_mwts) + numberOfLevels(varno_rawbt_mwhs);
-    vertcos.push_back(NewDimensionScale<int>("Channel", number_of_levels,
+    int number_of_levels = numberOfLevels(varno_rawbt_mwts) + numberOfLevels(varno_rawbt_mwhs);
+    vertcos.push_back(NewDimensionScale<int>("nchans", number_of_levels,
                                              number_of_levels, number_of_levels));
   } else if (obsgroup_ == obsgroup_geocloud) {
-    const int number_of_levels = numberOfLevels(varno_cloud_fraction_covered);
-    vertcos.push_back(NewDimensionScale<int>("Channel", number_of_levels,
+    int number_of_levels = numberOfLevels(varno_cloud_fraction_covered);
+    vertcos.push_back(NewDimensionScale<int>("nchans", number_of_levels,
                                              number_of_levels, number_of_levels));
   } else if (obsgroup_ == obsgroup_surfacecloud) {
-    const int number_of_levels = numberOfLevels(varno_cloud_fraction_covered);
-    vertcos.push_back(NewDimensionScale<int>("Channel", number_of_levels,
+    int number_of_levels = numberOfLevels(varno_cloud_fraction_covered);
+    vertcos.push_back(NewDimensionScale<int>("nchans", number_of_levels,
                                              number_of_levels, number_of_levels));
   } else if (obsgroup_ == obsgroup_scatwind) {
-    const int number_of_levels = numberOfLevels(varno_dd);
-    vertcos.push_back(NewDimensionScale<int>("Channel", number_of_levels,
+    int number_of_levels = numberOfLevels(varno_dd);
+    vertcos.push_back(NewDimensionScale<int>("nchans", number_of_levels,
                                              number_of_levels, number_of_levels));
   } else if (obsgroup_ == obsgroup_gnssro && max_number_channels_ > 0) {
-    const int number_of_levels = numberOfLevels(varno_bending_angle);
-    vertcos.push_back(NewDimensionScale<int>("Channel", number_of_levels,
+    int number_of_levels = numberOfLevels(varno_bending_angle);
+    vertcos.push_back(NewDimensionScale<int>("nchans", number_of_levels,
                                              number_of_levels, number_of_levels));
   }
   return vertcos;
@@ -216,7 +200,7 @@ DataFromSQL::ArrayX<T> DataFromSQL::getNumericMetadataColumn(std::string const& 
   int seqno_index  = getColumnIndex("seqno");
   int varno_index  = getColumnIndex("varno");
   ArrayX<T> arr(number_of_metadata_rows_);
-  arr = odb_missing<T>();
+  arr = odb_missing_int;
   bool still_looking = false;
   if (column_index != -1) {
     size_t seqno    = -1;
@@ -287,7 +271,7 @@ std::vector<std::string> DataFromSQL::getMetadataStringColumn(std::string const&
       }
     }
   }
-  for (size_t i = arr.size(); i < number_of_metadata_rows_; i++) {
+  for (int i = arr.size(); i < number_of_metadata_rows_; i++) {
     arr.push_back(std::string(""));
   }
   return arr;
@@ -334,14 +318,8 @@ Eigen::Array<T, Eigen::Dynamic, 1> DataFromSQL::getVarnoColumn(const std::vector
   // Number of entries for each varno.
   std::map <int, int> varno_size;
   for (const int varno : varnos) {
-    if (obsgroup_ == obsgroup_surfacecloud 
-        || obsgroup_ == obsgroup_seviriclr
-        || obsgroup_ == obsgroup_seviriasr) {
-      if (hasVarno(varno_cloud_fraction_asr)) {
-        varno_size[varno] = std::max(1,static_cast<int>(numberOfRowsForVarno(varno) / number_of_metadata_rows_));
-      } else {
-        varno_size[varno] = numberOfRowsForVarno(varno) / number_of_metadata_rows_;
-      }
+    if (obsgroup_ == obsgroup_surfacecloud) {
+      varno_size[varno] = numberOfRowsForVarno(varno) / number_of_metadata_rows_;
     } else {
       varno_size[varno] = std::max(1,static_cast<int>(numberOfRowsForVarno(varno) / number_of_metadata_rows_));
     }
@@ -363,7 +341,7 @@ Eigen::Array<T, Eigen::Dynamic, 1> DataFromSQL::getVarnoColumn(const std::vector
 
   // Final ordering of indices to use when filling array of data.
   std::vector <int> varno_index_order;
-  for (size_t i = 0; i < number_of_metadata_rows_; ++i) {
+  for (int i = 0; i < number_of_metadata_rows_; ++i) {
     for (const int varno : varnos) {
       for (int j = 0; j < varno_size[varno]; ++j) {
         varno_index_order.push_back(varno_order_map[varno][varno_current_index[varno]++]);
@@ -385,25 +363,26 @@ Eigen::Array<T, Eigen::Dynamic, 1> DataFromSQL::getVarnoColumn(const std::vector
   if (nchans == 1) {
     if (column_index != -1 && varno_index != -1) {
       if (obsgroup_ == obsgroup_surface || obsgroup_ == obsgroup_aircraft) {
-        for (size_t j = 0; j < num_rows; ++j) {
+        for (int j = 0; j < num_rows; ++j) {
           arr[j] = getData(varno_index_order[j], column_index);
         }
       } else {
-        for (size_t j = 0; j < varno_index_order.size(); ++j) {
+        for (int j = 0; j < varno_index_order.size(); ++j) {
           arr[j] = getData(varno_index_order[j], column_index);
         }
       }
     }
   } else {
     if (column_index != -1 && varno_index != -1) {
-      size_t j = -1;
-      int k_chan = 0;
+      size_t j = 0;
+      int k_chan = 1;
       int seqno_index = getColumnIndex("seqno");
       size_t seqno = getData(0, seqno_index);
       for (size_t i = 0; i < number_of_rows_; i++) {
         if (std::find(varnos.begin(), varnos.end(), getData(i, varno_index)) != varnos.end()) {
-          size_t seqno_new = getData(i, seqno_index);
           k_chan++;
+          arr[j] = getData(i, column_index);
+          size_t seqno_new = getData(i, seqno_index);
           j++;
           if (k_chan > nchans_actual) {
             j += (nchans - nchans_actual);  // skip unused channels
@@ -414,7 +393,6 @@ Eigen::Array<T, Eigen::Dynamic, 1> DataFromSQL::getVarnoColumn(const std::vector
             seqno = seqno_new;
             k_chan = 1;
           }
-          arr[j] = getData(i, column_index);
         }
       }
     }
@@ -427,7 +405,7 @@ void DataFromSQL::select(const std::vector<std::string>& columns, const std::str
                          const bool truncateProfilesToNumLev) {
   columns_ = columns;
   std::string sql = "select ";
-  for (size_t i = 0; i < columns_.size(); i++) {
+  for (int i = 0; i < columns_.size(); i++) {
     if (i == 0) {
       sql = sql + columns_.at(i);
     } else {
@@ -435,7 +413,7 @@ void DataFromSQL::select(const std::vector<std::string>& columns, const std::str
     }
   }
   sql = sql + " from \"" + filename + "\" where (";
-  for (size_t i = 0; i < varnos.size(); i++) {
+  for (int i = 0; i < varnos.size(); i++) {
     if (i == 0) {
       sql = sql + "varno = " + std::to_string(varnos.at(i));
     } else {
@@ -544,7 +522,7 @@ void DataFromSQL::select(const std::vector<std::string>& columns, const std::str
     // This vector is concatenated over all varnos.
     std::vector<int> varno_indices_to_remove;
     for (int varno : varnos) {
-      for (size_t jprof = 0; jprof < indices_initial.size(); ++jprof) {
+      for (int jprof = 0; jprof < indices_initial.size(); ++jprof) {
         // Initial and final assigned indices for this profile.
         const int index_initial = indices_initial[jprof];
         const int index_final = indices_final[jprof];
@@ -561,13 +539,13 @@ void DataFromSQL::select(const std::vector<std::string>& columns, const std::str
 
     // Erase entries from each column of varno_indices.
     std::sort(varno_indices_to_remove.begin(), varno_indices_to_remove.end());
-    for (size_t col = 0; col < data_.size(); ++col) {
+    for (int col = 0; col < data_.size(); ++col) {
       std::size_t current_index = 0;
       auto current_iter = std::begin(varno_indices_to_remove);
       auto end_iter = std::end(varno_indices_to_remove);
       const auto pred = [&](const double &) {
         // Advance current iterator if there are still more indices to remove.
-        if (current_iter != end_iter && static_cast<size_t>(*current_iter) == current_index++) {
+        if (current_iter != end_iter && *current_iter == current_index++) {
           return ++current_iter, true;
         }
         return false;
@@ -602,24 +580,9 @@ int DataFromSQL::getObsgroup() const { return obsgroup_; }
 std::vector<int64_t> DataFromSQL::getDates(std::string const& date_col,
                                            std::string const& time_col,
                                            util::DateTime const& epoch,
-                                           int64_t const missingInt64,
-                                           util::DateTime const timeWindowStart,
-                                           util::DateTime const timeWindowExtendedLowerBound,
-                                           std::string const& time_disp_col ) const {
-  const util::DateTime missingDate = util::missingValue<util::DateTime>();
-  const bool useTimeWindowExtendedLowerBound = timeWindowExtendedLowerBound != missingDate &&
-    timeWindowStart != missingDate;
-  if (useTimeWindowExtendedLowerBound && timeWindowExtendedLowerBound > timeWindowStart) {
-    throw eckit::UserError("'time window extended lower bound' must be less than or equal to "
-                           "the start of the DA window.", Here());
-  }
-
+                                           int64_t const missingInt64) const {
   const Eigen::ArrayXi var_date = getMetadataColumnInt(date_col);
   const Eigen::ArrayXi var_time = getMetadataColumnInt(time_col);
-  const int time_disp_col_index = getColumnIndex(time_disp_col);
-  const Eigen::ArrayXi var_time_disp = time_disp_col_index > -1 ?
-    getMetadataColumnInt(time_disp_col) :
-    Eigen::ArrayXi::Constant(var_date.size(), odb_missing_int);
   std::vector<int64_t> offsets;
   offsets.reserve(var_date.size());
   for (int i = 0; i < var_date.size(); i++) {
@@ -630,21 +593,7 @@ std::vector<int64_t> DataFromSQL::getDates(std::string const& date_col,
       const int hour   = var_time[i] / 10000;
       const int minute = var_time[i] / 100 - hour * 100;
       const int second = var_time[i] - 10000 * hour - 100 * minute;
-      util::DateTime datetime(year, month, day, hour, minute, second);
-      if (var_time_disp[i] != odb_missing_int) {
-        const util::Duration displacement(var_time_disp[i]);
-        datetime += displacement;
-      }
-      // If an extended lower bound on the time window has been set,
-      // and this observation's datetime lies between that bound and the start of the
-      // time window, move the datetime to the start of the time window.
-      // This ensures that the observation will be accepted by the time
-      // window cutoff that is applied in oops.
-      // The original value of the datetime is stored in MetaData/initialDateTime.
-      if (useTimeWindowExtendedLowerBound &&
-          datetime > timeWindowExtendedLowerBound &&
-          datetime <= timeWindowStart)
-        datetime = timeWindowStart;
+      const util::DateTime datetime(year, month, day, hour, minute, second);
       const int64_t offset = (datetime - epoch).toSeconds();
       offsets.push_back(offset);
     } else {
@@ -663,7 +612,7 @@ std::vector<std::string> DataFromSQL::getStationIDs() const {
     const Eigen::ArrayXi var_wmo_station_number = getMetadataColumnInt("wmo_station_number");
     const size_t nlocs = var_wmo_block_number.size();
     stationIDs.assign(nlocs, odb_missing_string);
-    for (size_t loc = 0; loc < nlocs; loc++) {
+    for (int loc = 0; loc < nlocs; loc++) {
       // If statid is not empty, use that to fill the station ID.
       if (var_statid[loc] != "")
         stationIDs[loc] = var_statid[loc];
@@ -683,49 +632,23 @@ std::vector<std::string> DataFromSQL::getStationIDs() const {
     const Eigen::ArrayXi var_buoy_identifier = getMetadataColumnInt("buoy_identifier");
     const size_t nlocs = var_argo_identifier.size();
     stationIDs.assign(nlocs, odb_missing_string);
-    for (size_t loc = 0; loc < nlocs; loc++) {
+    for (int loc = 0; loc < nlocs; loc++) {
       // If Argo identifier present, use those to fill the station ID.
       if (var_argo_identifier[loc] != odb_missing_int) {
         stream.str("");
-        stream << std::right << std::setfill('0') << std::setw(8) << var_argo_identifier[loc];
+        stream << std::setfill('0') << std::setw(8) << var_argo_identifier[loc];
         stationIDs[loc] = stream.str();
       // If Buoy identifier present, use those to fill the station ID.
       } else if (var_buoy_identifier[loc] != odb_missing_int) {
         stream.str("");
-        stream << std::right << std::setfill(' ') << std::setw(8) << var_buoy_identifier[loc];
+        stream << std::setfill('0') << std::setw(8) << var_buoy_identifier[loc];
         stationIDs[loc] = stream.str();
       // Neither Argo nor buoy identifier present; fill with statid
       } else if (var_statid[loc] != "") {
         stationIDs[loc] = var_statid[loc];
       }  // if statid empty, stationIDs[loc] defaults to missing string
     }
-  } else if (obsgroup_ == obsgroup_surface) {
-      const std::vector<std::string> var_statid = getMetadataStringColumn("statid");
-      const Eigen::ArrayXi var_buoy_identifier = getMetadataColumnInt("buoy_identifier");
-      const Eigen::ArrayXi var_wmo_block_number = getMetadataColumnInt("wmo_block_number");
-      const Eigen::ArrayXi var_wmo_station_number = getMetadataColumnInt("wmo_station_number");
-      const size_t nlocs = var_wmo_block_number.size();
-      stationIDs.assign(nlocs, odb_missing_string);
-      for (size_t loc = 0; loc < nlocs; loc++) {
-        // If statid is not empty, use that to fill the station ID.
-        if (var_statid[loc] != "")
-          stationIDs[loc] = var_statid[loc];
-        // If WMO block and station numbers are present, use those to fill the station ID.
-        // (This can override the assignment based on statid.)
-        if (var_wmo_block_number[loc] != odb_missing_int &&
-            var_wmo_station_number[loc] != odb_missing_int) {
-          stream.str("");
-          stream << std::setfill('0') << std::setw(2) << var_wmo_block_number[loc]
-                 << std::setfill('0') << std::setw(3) << var_wmo_station_number[loc];
-          stationIDs[loc] = stream.str();
-        }
-        if (var_buoy_identifier[loc] != odb_missing_int) {
-          stream.str("");
-          stream << std::setfill('0') << std::setw(7) << var_buoy_identifier[loc];
-          stationIDs[loc] = stream.str();
-        }
-      }
-    }
+  }
   return stationIDs;
 }
 
@@ -739,7 +662,7 @@ void DataFromSQL::createVarnoIndependentIodaVariable(
     createNumericVarnoIndependentIodaVariable<float>(column, og, params);
   } else {
     const std::vector<std::string> var = getMetadataStringColumn(column);
-    ioda::Variable v = og.vars.createWithScales<std::string>(column, {og.vars["Location"]}, params);
+    ioda::Variable v = og.vars.createWithScales<std::string>(column, {og.vars["nlocs"]}, params);
     v.write(var);
   }
 }
@@ -751,7 +674,7 @@ void DataFromSQL::createNumericVarnoIndependentIodaVariable(
   const ArrayX<T> var = getNumericMetadataColumn<T>(column);
   VariableCreationParameters params_copy = params;
   params_copy.setFillValue<T>(odb_missing<T>());
-  ioda::Variable v = og.vars.createWithScales<T>(column, {og.vars["Location"]}, params_copy);
+  ioda::Variable v = og.vars.createWithScales<T>(column, {og.vars["nlocs"]}, params_copy);
   v.writeWithEigenRegular(var);
 }
 
@@ -778,19 +701,18 @@ void DataFromSQL::createVarnoIndependentIodaVariables(
     for (size_t loc = 0; loc < member_values.size(); ++loc)
       member_values[loc] = (var(loc) != odb_missing_int && (var(loc) & mask)) ? 1 : 0;
     ioda::Variable v = og.vars.createWithScales<char>(
-          column + "." + member.name, {og.vars["Location"]}, params);
+          column + "." + member.name, {og.vars["nlocs"]}, params);
     v.write(member_values);
   }
 }
 
-ioda::Variable DataFromSQL::assignChannelNumbers(const int varno, ioda::ObsGroup og,
-                                                 const std::string &vertcoName) const {
+ioda::Variable DataFromSQL::assignChannelNumbers(const int varno, ioda::ObsGroup og) const {
   const std::vector<int> varnos{varno};
-  Eigen::ArrayXi var = getVarnoColumn<int>(varnos, vertcoName,
+  Eigen::ArrayXi var = getVarnoColumn<int>(varnos, std::string("initial_vertco_reference"),
                                            numberOfLevels(varno), numberOfLevels(varno));
 
-  size_t number_of_levels = numberOfLevels(varno);
-  ioda::Variable v = og.vars["Channel"];
+  int number_of_levels = numberOfLevels(varno);
+  ioda::Variable v = og.vars["nchans"];
   Eigen::ArrayXi var_single(number_of_levels);
   for (size_t i = 0; i < number_of_levels; i++) {
     var_single[i] = var[i];
@@ -800,11 +722,11 @@ ioda::Variable DataFromSQL::assignChannelNumbers(const int varno, ioda::ObsGroup
 }
 
 ioda::Variable DataFromSQL::assignChannelNumbersSeq(const std::vector<int> varnos, const ioda::ObsGroup og) const {
-  size_t number_of_levels = 0;
+  int number_of_levels = 0;
   for (size_t i = 0; i < varnos.size(); i++) {
     number_of_levels += numberOfLevels(varnos[i]);
   }
-  ioda::Variable v = og.vars["Channel"];
+  ioda::Variable v = og.vars["nchans"];
   Eigen::ArrayXi var_single(number_of_levels);
   for (size_t i = 0; i < number_of_levels; i++) {
     if (obsgroup_ == obsgroup_abiclr || obsgroup_ == obsgroup_ahiclr) {
@@ -821,8 +743,7 @@ ioda::Variable DataFromSQL::assignChannelNumbersSeq(const std::vector<int> varno
 
 void DataFromSQL::createVarnoDependentIodaVariable(
     std::string const &column, const int varno,
-    ioda::ObsGroup og, const ioda::VariableCreationParameters &params,
-    const std::string &varname) const {
+    ioda::ObsGroup og, const ioda::VariableCreationParameters &params) const {
   const std::vector<ioda::Variable> dimensionScales =
       getVarnoDependentVariableDimensionScales(varno, og);
   if (dimensionScales.empty())
@@ -834,18 +755,19 @@ void DataFromSQL::createVarnoDependentIodaVariable(
 
   VariableCreationParameters params_copy = params;
 
-  const std::string outputname = varname == "" ? column + "/" + std::to_string(varno) : varname;
   const int col_index = getColumnIndex(column);
   const int col_type = column_types_.at(col_index);
   if (col_type == odb_type_int || col_type == odb_type_bitfield) {
     Eigen::ArrayXi var = getVarnoColumn<int>(varnos, column, nchans, nchans_actual);
     params_copy.setFillValue<int>(odb_missing_int);
-    ioda::Variable v = og.vars.createWithScales<int>(outputname, dimensionScales, params_copy);
+    ioda::Variable v = og.vars.createWithScales<int>(column + "/" + std::to_string(varno),
+                                                     dimensionScales, params_copy);
     v.writeWithEigenRegular(var);
   } else if (col_type == odb_type_real) {
     Eigen::ArrayXf var = getVarnoColumn<float>(varnos, column, nchans, nchans_actual);
     params_copy.setFillValue<float>(odb_missing_float);
-    ioda::Variable v = og.vars.createWithScales<float>(outputname, dimensionScales, params_copy);
+    ioda::Variable v = og.vars.createWithScales<float>(column + "/" + std::to_string(varno),
+                                                       dimensionScales, params_copy);
     v.writeWithEigenRegular(var);
   } else {
     throw eckit::NotImplemented(
@@ -901,13 +823,6 @@ std::vector<ioda::Variable> DataFromSQL::getVarnoDependentVariableDimensionScale
   size_t number_of_levels;
   if (obsgroup_ == obsgroup_geocloud || obsgroup_ == obsgroup_surfacecloud) {
     number_of_levels = numberOfLevels(varno_cloud_fraction_covered);
-  } else if (obsgroup_ == obsgroup_seviriclr || 
-             obsgroup_ == obsgroup_seviriasr) {
-    if (hasVarno(varno_cloud_fraction_asr)) {
-      number_of_levels = numberOfLevels(varno);
-    } else {
-      number_of_levels = numberOfLevels(varno_rawbt);
-    }
   } else {
     number_of_levels = numberOfLevels(varno);
   }
@@ -915,9 +830,9 @@ std::vector<ioda::Variable> DataFromSQL::getVarnoDependentVariableDimensionScale
   if (number_of_levels == 0) {
     // Leave dimensionScales empty
   } else if (number_of_levels == 1 && obsgroup_ != obsgroup_geocloud && obsgroup_ != obsgroup_surfacecloud) {
-    dimensionScales = {og.vars["Location"]};
+    dimensionScales = {og.vars["nlocs"]};
   } else {
-    dimensionScales = {og.vars["Location"], og.vars["Channel"]};
+    dimensionScales = {og.vars["nlocs"], og.vars["nchans"]};
   }
 
   return dimensionScales;
@@ -941,17 +856,11 @@ void DataFromSQL::getVarnoColumnCallArguments(int varno, std::vector<int> &varno
   } else if (obsgroup_ == obsgroup_mwsfy3 && varno != varno_rawbt_mwts) {
     varnos = {varno_rawbt_mwts, varno_rawbt_mwhs};
   } else if (obsgroup_ == obsgroup_cris || obsgroup_ == obsgroup_hiras || obsgroup_ == obsgroup_iasi) {
-    nchans = numberOfLevels(varnos[0]);
+    nchans = numberOfLevels(varno_rawsca);
     nchans_actual = numberOfLevels(varno);
   } else if (obsgroup_ == obsgroup_geocloud || obsgroup_ == obsgroup_surfacecloud) {
     nchans = numberOfLevels(varno_cloud_fraction_covered);
     nchans_actual = numberOfLevels(varno);
-  } else if (obsgroup_ == obsgroup_seviriclr || 
-             obsgroup_ == obsgroup_seviriasr) {
-    if (!hasVarno(varno_cloud_fraction_asr)) {
-      nchans = numberOfLevels(varno_rawbt);
-      nchans_actual = numberOfLevels(varno);
-    }
   } else if (obsgroup_ == obsgroup_gnssro) {
     nchans = numberOfLevels(varno_bending_angle);
     nchans_actual = numberOfLevels(varno);

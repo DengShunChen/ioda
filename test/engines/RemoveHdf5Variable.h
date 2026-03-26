@@ -16,7 +16,6 @@
 #include "eckit/testing/Test.h"
 
 #include "ioda/Engines/EngineUtils.h"
-#include "ioda/Engines/WriterFactory.h"
 #include "ioda/Group.h"
 #include "ioda/ObsGroup.h"
 
@@ -39,42 +38,40 @@ CASE("ioda/RemoveHdf5Variable") {
   RmH5VarTestParameters params;
   params.validateAndDeserialize(conf);
 
-  // Create an HDF5 file backend for writing and attach to an ObsGroup
-  // Third and fourth arguments to constructFileWriterFromConfig are
-  // "write multiple files" and "is parallel io" respectively.
-  eckit::LocalConfiguration engineConfig =
-      Engines::constructFileBackendConfig("hdf5", params.outFile);
-  std::unique_ptr<Engines::WriterBase> writerEngine =
-      Engines::constructFileWriterFromConfig(oops::mpi::world(), oops::mpi::myself(),
-              false, false, engineConfig);
+  // Create an HDF5 file backend and attach to an ObsGroup
+  Engines::BackendNames backendName = Engines::BackendNames::Hdf5File;
+  Engines::BackendCreationParameters backendParams;
+  backendParams.fileName = params.outFile;
+  backendParams.action = Engines::BackendFileActions::Create;
+  backendParams.createMode = Engines::BackendCreateModes::Truncate_If_Exists;
 
-  ioda::Group g = writerEngine->getObsGroup();
+  ioda::Group g = constructBackend(backendName, backendParams);
 
-  // Need two dimensions, Location and Channel, so we can test using 1D and 2D variables
+  // Need two dimensions, nlocs and nchans, so we can test using 1D and 2D variables
   const int numLocs = 5;
   const int numChans = 3;
   ioda::NewDimensionScales_t newDims;
-  newDims.push_back(ioda::NewDimensionScale<int>("Location", numLocs, numLocs, numLocs));
-  newDims.push_back(ioda::NewDimensionScale<int>("Channel", numChans, numChans, numChans));
+  newDims.push_back(ioda::NewDimensionScale<int>("nlocs", numLocs, numLocs, numLocs));
+  newDims.push_back(ioda::NewDimensionScale<int>("nchans", numChans, numChans, numChans));
 
   ioda::ObsGroup og = ioda::ObsGroup::generate(g, newDims);
 
   // Create 2 1D vars and remove one of them and create 2 2D vars and remove one
   // of them. This is enough to check the output file as see if the DIMENSION_LIST
   // and REFERENCE_LIST attributes all got updated correctly with the removals.
-  ioda::Variable LocationVar = og.vars["Location"];
-  ioda::Variable ChannelVar = og.vars["Channel"];
+  ioda::Variable nlocsVar = og.vars["nlocs"];
+  ioda::Variable nchansVar = og.vars["nchans"];
 
   ioda::VariableCreationParameters float_params;
   float_params.chunk = true;
   float_params.compressWithGZIP();
   float_params.setFillValue<float>(-999);
 
-  og.vars.createWithScales<float>("keep1d", {LocationVar}, float_params);
-  og.vars.createWithScales<float>("toss1d", {LocationVar}, float_params);
+  og.vars.createWithScales<float>("keep1d", {nlocsVar}, float_params);
+  og.vars.createWithScales<float>("toss1d", {nlocsVar}, float_params);
 
-  og.vars.createWithScales<float>("keep2d", {LocationVar, ChannelVar}, float_params);
-  og.vars.createWithScales<float>("toss2d", {LocationVar, ChannelVar}, float_params);
+  og.vars.createWithScales<float>("keep2d", {nlocsVar, nchansVar}, float_params);
+  og.vars.createWithScales<float>("toss2d", {nlocsVar, nchansVar}, float_params);
 
   // remove the two variables
   og.vars.remove("toss1d");

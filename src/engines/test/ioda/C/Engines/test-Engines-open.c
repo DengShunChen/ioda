@@ -7,27 +7,23 @@
 /** \file test-Engines.c
  * \brief C binding tests for ioda-engines engines.
  *
- * \author Patrick Nichols ( based on Ryans Honeyager's version)
+ * \author Ryan Honeyager (honeyage@ucar.edu)
  **/
 
 #include <stdio.h>
 #include <string.h>
-/*
+
+#include "ioda/C/ioda_c.h"
 #include "ioda/C/Engines_c.h"
 #include "ioda/C/Group_c.h"
 #include "ioda/defs.h"  // Always include this first.
-*/
-
-#include "ioda/C/ioda_group_c_.hpp"
-#include "ioda/C/ioda_engines_c.hpp"
 
 int main() {
   int errval = 0;
-  ioda_group_t* g4 = NULL;
+  const struct ioda_c_interface* ioda  = get_ioda_c_interface();
+  struct ioda_group* g4 = NULL;
 
-//  g4 = ioda->Engines->HH->openFile(19, "test-engines-3.hdf5", ioda_Engines_BackendOpenModes_Read_Only);
-
-  g4 = ioda_engines_hh_open_file(reinterpret_cast<void*>(name1),1); 
+  g4 = ioda->Engines->HH->openFile(19, "test-engines-3.hdf5", ioda_Engines_BackendOpenModes_Read_Only);
   if (!g4) goto hadError;
 
   goto cleanup;
@@ -37,7 +33,7 @@ hadError:
   errval = 1;
 
 cleanup:
-  if (g4) ioda_group_c_dtor(&g4);
+  if (g4) ioda->Groups->destruct(g4);
 
   return errval;
 }

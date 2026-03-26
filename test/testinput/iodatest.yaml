@@ -1,43 +1,42 @@
 ---
-time window:
-  begin: 2018-04-14T21:00:00Z
-  end: 2018-04-15T03:00:00Z
+window begin: 2018-04-14T21:00:00Z
+window end: 2018-04-15T03:00:00Z
 observations:
 - obs space:
     name: "AOD"
-    simulated variables: ['brightnessTemperature']
-    observed variables: ['brightnessTemperature']
+    simulated variables: ['brightness_temperature']
+    observed variables: ['brightness_temperature']
     obsdatain:
       engine:
         type: H5File
         obsfile: Data/testinput_tier_1/aod_obs_2018041500_m.nc4
 - obs space:
     name: "AOD VIIRS"
-    simulated variables: ['brightnessTemperature']
-    observed variables: ['brightnessTemperature']
+    simulated variables: ['brightness_temperature']
+    observed variables: ['brightness_temperature']
     obsdatain:
       engine:
         type: H5File
         obsfile: Data/testinput_tier_1/aod_viirs_obs_2018041500_sf42.nc4
 - obs space:
     name: "AMSUA N19"
-    simulated variables: ['brightnessTemperature']
-    observed variables: ['brightnessTemperature']
+    simulated variables: ['brightness_temperature']
+    observed variables: ['brightness_temperature']
     obsdatain:
       engine:
         type: H5File
         obsfile: Data/testinput_tier_1/amsua_n19_obs_2018041500_m.nc4
 - obs space:
     name: "GMI GPM"
-    simulated variables: ['brightnessTemperature']
-    observed variables: ['brightnessTemperature']
+    simulated variables: ['brightness_temperature']
+    observed variables: ['brightness_temperature']
     obsdatain:
       engine:
         type: H5File
         obsfile: Data/testinput_tier_1/gmi_gpm_obs_2018041500_m.nc4
 - obs space:
     name: Radiosonde
-    simulated variables: ['airTemperature', 'windEastward']
+    simulated variables: ['air_temperature', 'eastward_wind']
     obsdatain:
       engine:
         type: H5File

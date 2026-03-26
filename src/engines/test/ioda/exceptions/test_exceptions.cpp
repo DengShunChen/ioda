@@ -20,7 +20,7 @@ void throws_exception_inner() {
 void throws_exception_trivial_rethrow() {
   try {
     throws_exception_inner();
-  } catch (const std::exception&) {
+  } catch (std::exception) {
     throw;
   }
 }

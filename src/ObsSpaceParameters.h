@@ -12,7 +12,7 @@
 #include "ioda/core/FileFormat.h"
 #include "ioda/core/ParameterTraitsFileFormat.h"
 #include "ioda/distribution/DistributionFactory.h"
-#include "ioda/ioPool/IoPoolParameters.h"
+#include "ioda/Io/IoPoolParameters.h"
 #include "ioda/Misc/DimensionScales.h"
 #include "ioda/Misc/Dimensions.h"
 #include "ioda/ObsDataIoParameters.h"
@@ -20,7 +20,8 @@
 #include "eckit/exception/Exceptions.h"
 #include "eckit/mpi/Comm.h"
 
-#include "oops/base/ParameterTraitsObsVariables.h"
+#include "oops/base/ObsSpaceBase.h"  // for ObsSpaceParametersBase
+#include "oops/base/ParameterTraitsVariables.h"
 #include "oops/util/DateTime.h"
 #include "oops/util/Logger.h"
 #include "oops/util/parameters/OptionalParameter.h"
@@ -48,13 +49,13 @@ class ObsExtendParameters : public oops::Parameters {
     /// Variables that are filled with non-missing values when producing companion profiles.
     oops::Parameter<std::vector<std::string>> nonMissingExtendedVars
         {"variables filled with non-missing values",
-            { "latitude", "longitude", "dateTime", "pressure",
-                "air_pressure_levels", "stationIdentification" },
+            { "latitude", "longitude", "dateTime", "air_pressure",
+                "air_pressure_levels", "station_id" },
             this};
 };
 
-class ObsTopLevelParameters : public oops::Parameters {
-    OOPS_CONCRETE_PARAMETERS(ObsTopLevelParameters, Parameters)
+class ObsTopLevelParameters : public oops::ObsSpaceParametersBase {
+    OOPS_CONCRETE_PARAMETERS(ObsTopLevelParameters, ObsSpaceParametersBase)
 
  public:
     /// name of obs space
@@ -64,17 +65,17 @@ class ObsTopLevelParameters : public oops::Parameters {
     oops::Parameter<DistributionParametersWrapper> distribution{"distribution", {}, this};
 
     /// simulated variables
-    oops::RequiredParameter<oops::ObsVariables> simVars{"simulated variables", this};
+    oops::RequiredParameter<oops::Variables> simVars{"simulated variables", this};
 
     /// Simulated variables whose observed values may be absent from the input file, but must be
     /// created (computed) by the start of the data assimilation stage.
-    oops::Parameter<oops::ObsVariables> derivedSimVars{"derived variables", {}, this};
+    oops::Parameter<oops::Variables> derivedSimVars{"derived variables", {}, this};
 
     /// Observation variables whose observed values are to be processed.
-    oops::Parameter<oops::ObsVariables> ObservedVars{"observed variables", {}, this};
+    oops::Parameter<oops::Variables> ObservedVars{"observed variables", {}, this};
 
     /// Io pool parameters
-    oops::Parameter<IoPool::IoPoolParameters> ioPool{"io pool", {}, this};
+    oops::Parameter<IoPoolParameters> ioPool{"io pool", {}, this};
 
     /// extend the ObsSpace with extra fixed-size records
     oops::OptionalParameter<ObsExtendParameters> obsExtend{"extension", this};
@@ -89,8 +90,6 @@ class ObsTopLevelParameters : public oops::Parameters {
 
     /// output specification by writing to a file
     oops::OptionalParameter<ObsDataOutParameters> obsDataOut{"obsdataout", this};
-
-    oops::Parameter<int> obsPerturbationsSeed{"obs perturbations seed", 0, this};
 };
 
 class ObsSpaceParameters {
@@ -99,14 +98,13 @@ class ObsSpaceParameters {
     ObsTopLevelParameters top_level_;
 
     /// Constructor
-    ObsSpaceParameters(const eckit::Configuration &topConfig,
-                       const util::TimeWindow timeWindow,
+    ObsSpaceParameters(const ObsTopLevelParameters &topLevelParams,
+                       const util::DateTime & winStart, const util::DateTime & winEnd,
                        const eckit::mpi::Comm & comm, const eckit::mpi::Comm & timeComm) :
-                           top_level_(),
-                           time_window_(timeWindow), comm_(comm),
+                           top_level_(topLevelParams),
+                           win_start_(winStart), win_end_(winEnd), comm_(comm),
                            time_comm_(timeComm),
                            new_dims_(), max_var_size_(0) {
-        top_level_.validateAndDeserialize(topConfig);
         // Record the MPI rank number. The rank number is being saved during the
         // construction of the Parameters for the ObsSpace saveToFile routine.
         // (saveToFile will uniquify the output file name by tagging on the MPI rank
@@ -125,8 +123,11 @@ class ObsSpaceParameters {
         }
     }
 
+    /// \brief return the start of the DA timing window
+    const util::DateTime & windowStart() const {return win_start_;}
 
-    const util::TimeWindow timeWindow() const {return time_window_;}
+    /// \brief return the end of the DA timing window
+    const util::DateTime & windowEnd() const {return win_end_;}
 
     /// \brief return the associated MPI group communicator
     const eckit::mpi::Comm & comm() const {return comm_;}
@@ -160,7 +161,11 @@ class ObsSpaceParameters {
     int getMpiTimeRank() const { return mpi_time_rank_; }
 
  private:
-    const util::TimeWindow time_window_;
+    /// \brief Beginning of DA timing window
+    const util::DateTime win_start_;
+
+    /// \brief End of DA timing window
+    const util::DateTime win_end_;
 
     /// \brief MPI group communicator
     const eckit::mpi::Comm & comm_;

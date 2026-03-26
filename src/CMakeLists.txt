@@ -10,46 +10,6 @@ ObsSpaceParameters.h
 ObsVector.cc
 ObsVector.h
 
-containers/ColumnMetadata.cpp
-containers/ColumnMetadata.h
-containers/ColumnMetadatum.cpp
-containers/ColumnMetadatum.h
-containers/Constants.h
-containers/Data.cpp
-containers/Data.h
-containers/DataBase.h
-containers/DataRow.cpp
-containers/DataRow.h
-containers/Datum.cpp
-containers/Datum.h
-containers/DatumBase.h
-containers/FrameCols.cpp
-containers/FrameCols.h
-containers/FrameColsData.cpp
-containers/FrameColsData.h
-containers/FrameRows.cpp
-containers/FrameRows.h
-containers/FrameRowsData.cpp
-containers/FrameRowsData.h
-containers/Functions.cpp
-containers/Functions.h
-containers/FunctionsCols.cpp
-containers/FunctionsCols.h
-containers/FunctionsRows.cpp
-containers/FunctionsRows.h
-containers/IColsData.h
-containers/IFrameData.h
-containers/IRowsData.h
-containers/IFrame.h
-containers/ViewCols.cpp
-containers/ViewCols.h
-containers/ViewColsData.cpp
-containers/ViewColsData.h
-containers/ViewRows.cpp
-containers/ViewRows.h
-containers/ViewRowsData.cpp
-containers/ViewRowsData.h
-
 core/FileFormat.cc
 core/FileFormat.h
 core/IodaUtils.cc
@@ -90,36 +50,14 @@ distribution/NonoverlappingDistributionAccumulator.h
 distribution/RoundRobin.cc
 distribution/RoundRobin.h
 
-ioPool/IoPoolBase.cpp
-ioPool/IoPoolBase.h
-ioPool/IoPoolParameters.h
-ioPool/ReaderPoolBase.cpp
-ioPool/ReaderPoolBase.h
-ioPool/ReaderPoolFactory.cpp
-ioPool/ReaderPoolFactory.h
-ioPool/ReaderPoolUtils.cpp
-ioPool/ReaderPoolUtils.h
-ioPool/ReaderPrepInputFiles.cpp
-ioPool/ReaderPrepInputFiles.h
-ioPool/ReaderSinglePool.cpp
-ioPool/ReaderSinglePool.h
-ioPool/ReaderSinglePoolAllTasks.cpp
-ioPool/ReaderSinglePoolAllTasks.h
-ioPool/WriterPoolBase.cpp
-ioPool/WriterPoolBase.h
-ioPool/WriterPoolFactory.cpp
-ioPool/WriterPoolFactory.h
-ioPool/WriterPoolUtils.cpp
-ioPool/WriterPoolUtils.h
-ioPool/WriterSinglePool.cpp
-ioPool/WriterSinglePool.h
-
-c_obsdatavector_int.hpp
-c_obsdatavector_int.cpp
+io/ObsFrame.cc
+io/ObsFrame.h
+io/ObsFrameRead.cc
+io/ObsFrameRead.h
 )
 
 if (IODA_BUILD_LANGUAGE_FORTRAN)
-  list( APPEND ioda_src_files obsspace_mod.F90 obsdatavector_int_mod.f90 )
+  list( APPEND ioda_src_files obsspace_mod.F90)
 endif()
 
 list( APPEND ioda_fortran_interface_includes
@@ -133,15 +71,6 @@ ecbuild_add_library( TARGET ${PROJECT_NAME}
                      HEADER_DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
                      LINKER_LANGUAGE CXX )
 
-# Mark Boost as a system library to silence compiler warnings from Boost headers
-# Ditto for Eigen
-target_include_directories( ${PROJECT_NAME} SYSTEM PUBLIC ${Boost_INCLUDE_DIRS} )
-target_include_directories( ${PROJECT_NAME} SYSTEM PUBLIC ${EIGEN3_INCLUDE_DIRS} )
-
-if (IODA_BUILD_LANGUAGE_FORTRAN)
-target_link_libraries( ${PROJECT_NAME} PUBLIC ioda_fortran )
-endif()
-
 target_link_libraries( ${PROJECT_NAME} PUBLIC ioda_engines )
 target_link_libraries( ${PROJECT_NAME} PUBLIC fckit )
 target_link_libraries( ${PROJECT_NAME} PUBLIC ${oops_LIBRARIES} )
@@ -153,9 +82,8 @@ add_custom_target(${PROJECT_NAME}_headers ALL
                     COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR} ${BUILD_DIR_INCLUDE_PATH}/${PROJECT_NAME})
 add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_headers)
 
-target_include_directories(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${BUILD_DIR_INCLUDE_PATH}>
-	$<TARGET_PROPERTY:ioda_fortran,Fortran_MODULE_DIRECTORY>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/engines/ioda/include>)
+target_include_directories(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${BUILD_DIR_INCLUDE_PATH}>)
+#  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/engines/ioda/include>)
 
 #Fortran file interfaces templates
 install(FILES ${ioda_fortran_interface_includes} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ioda)
@@ -167,6 +95,6 @@ if (IODA_BUILD_LANGUAGE_FORTRAN)
   install(DIRECTORY ${CMAKE_BINARY_DIR}/${MODULE_DIR}/ DESTINATION ${MODULE_DIR})
   target_include_directories(${PROJECT_NAME} INTERFACE
                                 $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/${MODULE_DIR}>
-                                $<INSTALL_INTERFACE:${MODULE_DIR}>) 
+                                $<INSTALL_INTERFACE:${MODULE_DIR}>)
 endif()
 

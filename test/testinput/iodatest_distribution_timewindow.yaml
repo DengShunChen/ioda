@@ -1,7 +1,6 @@
 ---
-time window:
-  begin: 2021-01-15T15:15:02Z
-  end:   2021-01-15T15:15:08Z
+window begin: 2021-01-15T15:15:02Z
+window end:   2021-01-15T15:15:08Z
 
 # Expected indices are based on 4 PE's during an MPI run. If you change
 # the number of PE in the ecbuild_add_test in the ../CMakeLists.txt file,
@@ -23,8 +22,8 @@ observations:
         # At present Halo is not guaranteed to keep records on a single PE, so
         # we're forced to put each location in a separate record.
         group variables: [longitude]
-        # MetaData/longitude = 1, 21, 41, 61, 81, 101, 121, 141, 161, 181
-        # MetaData/datetime = 2021-01-15T15:15:00Z, ...:01Z, ..., ...:09Z
+        # longitude@MetaData = 1, 21, 41, 61, 81, 101, 121, 141, 161, 181
+        # datetime@MetaData = 2021-01-15T15:15:00Z, ...:01Z, ..., ...:09Z
     simulated variables: [temperature]
     distribution:
       name: Halo
@@ -72,8 +71,8 @@ observations:
         # At present Halo is not guaranteed to keep records on a single PE, so
         # we're forced to put each location in a separate record.
         group variables: [longitude]
-        # MetaData/longitude = 1, 21, 41, 61, 81, 101, 121, 141, 161, 181
-        # MetaData/datetime = 2021-01-15T15:15:00Z, ...:01Z, ..., ...:09Z
+        # longitude@MetaData = 1, 21, 41, 61, 81, 101, 121, 141, 161, 181
+        # datetime@MetaData = 2021-01-15T15:15:00Z, ...:01Z, ..., ...:09Z
     simulated variables: [temperature]
     distribution:
       name: Halo

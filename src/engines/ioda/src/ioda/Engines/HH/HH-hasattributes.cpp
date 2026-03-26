@@ -96,10 +96,9 @@ Attribute HH_HasAttributes::open(const std::string& name) const {
     Attribute att{b};
     return att;
   } else {
-    hid_t ret = H5Aopen(base_(), name.c_str(), H5P_DEFAULT);
+    auto ret = H5Aopen(base_(), name.c_str(), H5P_DEFAULT);
     if (ret < 0) throw Exception("H5Aopen failed", ioda_Here());
-    auto b = std::make_shared<HH_Attribute>(
-                HH_hid_t(std::move(ret), Handles::Closers::CloseHDF5Attribute::CloseP));
+    auto b = std::make_shared<HH_Attribute>(ret);
     Attribute att{b};
     return att;
   }
@@ -125,7 +124,7 @@ Attribute HH_HasAttributes::create(const std::string& attrname, const Type& in_m
     auto b = std::make_shared<HH_Attribute>(attI);
     Attribute att{b};
     return att;
-  } catch (const std::bad_cast&) {
+  } catch (std::bad_cast) {
     std::throw_with_nested(Exception("typeBackend is the wrong type. Expected HH_Type.",
       ioda_Here()));
   }

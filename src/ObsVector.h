@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "ioda/ObsSpace.h"
-#include "oops/base/ObsVariables.h"
+#include "oops/base/Variables.h"
 #include "oops/util/ObjectCounter.h"
 #include "oops/util/Printable.h"
 
@@ -30,19 +30,16 @@ namespace ioda {
  *           dot product) are capable of handling missing values in the obs data.
  */
 
-class ObsVector : public ObsSpaceAssociated,
-                  public util::Printable,
+class ObsVector : public util::Printable,
                   private util::ObjectCounter<ObsVector> {
  public:
   static const std::string classname() {return "ioda::ObsVector";}
 
   explicit ObsVector(ObsSpace &, const std::string & name = "");
   ObsVector(const ObsVector &);
-  ObsVector(ObsVector &&);
   ~ObsVector();
 
   ObsVector & operator = (const ObsVector &);
-  ObsVector & operator = (ObsVector &&);
   ObsVector & operator*= (const double &);
   ObsVector & operator+= (const ObsVector &);
   ObsVector & operator-= (const ObsVector &);
@@ -52,35 +49,22 @@ class ObsVector : public ObsSpaceAssociated,
   ObsVector & operator = (const ObsDataVector<float> &);
 
   void zero();
-
-  /// Set all elements to one (used in tests)
+  /// set all elements to one (used in tests)
   void ones();
-
-  /// Add \p beta * \p y to the current vector
+  /// adds \p beta * \p y to the current vector
   void axpy(const double & beta, const ObsVector & y);
-
-  /// For each variable jvar in the current vector, add \p beta[jvar] * \p y[jloc * nvars_ + jvar]
-  /// (i.e. \p beta[jvar] * \p y restricted to that variable). \p beta has to be of size nvars_.
+  /// adds \p beta[ivar] * \p y[ivar] for each variable in the current
+  /// vector. \p beta has to be size of variables
   void axpy(const std::vector<double> & beta, const ObsVector & y);
-
-  /// For each variable jvar and each location jloc in the current vector,
-  /// add \p beta[jrec * nvars + jvar] * \p y[jloc * nvars + jvar], where jrec is the
-  /// record number associated with jloc. \p beta has to be of size nrecs() * nvars_,
-  void axpy_byrecord(const std::vector<double> & beta, const ObsVector & y);
 
   void invert();
   void random();
 
-  /// Global (across all MPI tasks) dot product of this with \p other
+  /// global (across all MPI tasks) dot product of this with \p other
   double dot_product_with(const ObsVector & other) const;
-
-  /// Global (across all MPI tasks) dot product of this with \p other,
-  /// variable by variable. Returns a vector of size nvars_.
+  /// global (across all MPI tasks) dot product of this with \p other,
+  /// variable by variable. Returns vectors size of nvars_
   std::vector<double> multivar_dot_product_with(const ObsVector & other) const;
-
-  /// Dot product of this with \p other, for each variable-record combination.
-  /// Returns a vector of size recs() * nvars_.
-  std::vector<double> multivarrec_dot_product_with(const ObsVector & other) const;
 
   double rms() const;
 
@@ -104,9 +88,8 @@ class ObsVector : public ObsSpaceAssociated,
 
   ObsSpace & space() {return obsdb_;}
   const ObsSpace & space() const {return obsdb_;}
-  std::vector<double> data() const {return values_;}
   const std::string & obstype() const {return obsdb_.obsname();}
-  const oops::ObsVariables & varnames() const {return obsvars_;}
+  const oops::Variables & varnames() const {return obsvars_;}
   std::size_t nvars() const {return nvars_;}
   std::size_t nlocs() const {return nlocs_;}
 
@@ -121,17 +104,14 @@ class ObsVector : public ObsSpaceAssociated,
   void save(const std::string &) const;
   void read(const std::string &);
 
-  void reduce(const std::vector<bool> & keepLocs) override;
-  void append() override;
-
  private:
-  void print(std::ostream &) const override;
+  void print(std::ostream &) const;
 
   /*! \brief Associate ObsSpace object */
   ObsSpace & obsdb_;
 
   /*! \brief Variables */
-  oops::ObsVariables obsvars_;
+  oops::Variables obsvars_;
 
   /*! \brief Number of variables */
   std::size_t nvars_;

@@ -31,19 +31,19 @@
  *   layout                                    notes
  *
  *     /                                   top-level group
- *      Location                           dimension scales (variables, coordinate values)
- *      Channel
+ *      nlocs                              dimension scales (variables, coordinate values)
+ *      nchans
  *      ...
  *      ObsValue/                          group: observational measurement values
- *               brightnessTemperature    variable: Tb, 2D, Location X Channel
- *               air_temperature           variable: T, 1D, Location
+ *               brightness_temperature    variable: Tb, 2D, nlocs X nchans
+ *               air_temperature           variable: T, 1D, nlocs
  *               ...
  *      ObsError/                          group: observational error estimates
- *               brightnessTemperature
+ *               brightness_temperature
  *               air_temperature
  *               ...
  *      PreQC/                             group: observational QC marks from data provider
- *               brightnessTemperature
+ *               brightness_temperature
  *               air_temperature
  *               ...
  *      MetaData/                          group: meta data associated with locations
@@ -61,11 +61,11 @@
  * a dimension is resized, the ObsGroup::resize function will resize the dimension scale
  * along with all variables that use that dimension scale.
  *
- * The basic ideas is to dimension observation data with Location as the first dimension, and
- * allow Location to be resizable so that it's possible to incrementally append data along
- * the Location (1st) dimension. For data that have rank > 1, the second through nth dimensions
- * are of fixed size. For example, brightnessTemperature can be store as 2D data with
- * dimensions (Location, Channel).
+ * The basic ideas is to dimension observation data with nlocs as the first dimension, and
+ * allow nlocs to be resizable so that it's possible to incrementally append data along
+ * the nlocs (1st) dimension. For data that have rank > 1, the second through nth dimensions
+ * are of fixed size. For example, brightness_temperature can be store as 2D data with
+ * dimensions (nlocs, nchans).
  *
  * \author Stephen Herbener (stephenh@ucar.edu), Ryan Honeyager (honeyage@ucar.edu)
  **/
@@ -93,6 +93,70 @@ int main(int argc, char** argv) {
     // Create the backend. For this code we are using a factory function,
     // constructFromCmdLine, made for testing purposes, which allows one to specify
     // a backend from the command line using the "--ioda-engine-options" option.
+    //
+    // There exists another factory function, constructBackend, which allows you
+    // to create a backend without requiring the command line option. The signature
+    // for this function is:
+    //
+    //        constructBackend(BackendNames, BackendCreationParameters &);
+    //
+    //
+    //        BackendNames is an enum type with values:
+    //               Hdf5File - file backend using HDF5 file
+    //               ObsStore - in-memory backend
+    //
+    //        BackendCreationParameters is a C++ structure with members:
+    //               fileName - string, used for file backend
+    //
+    //               actions - enum BackendFileActions type:
+    //                    Create - create a new file
+    //                    Open   - open an existing file
+    //
+    //               createMode - enum BackendCreateModes type:
+    //                    Truncate_If_Exists - overwrite existing file
+    //                    Fail_If_Exists     - throw exception if file exists
+    //
+    //               openMode - enum BackendOpenModes types:
+    //                    Read_Only  - open in read only mode
+    //                    Read_Write - open in modify mode
+    //
+    // Here are some code examples:
+    //
+    // Create backend using an hdf5 file for writing:
+    //
+    //        Engines::BackendNames backendName;
+    //        backendName = Engines::BackendNames::Hdf5File;
+    //
+    //        Engines::BackendCreationParameters backendParams;
+    //        backendParams.fileName = fileName;
+    //        backendParams.action = Engines::BackendFileActions::Create;
+    //        backendParams.createMode = Engines::BackendCreateModes::Truncate_If_Exists;
+    //
+    //        Group g = constructBackend(backendName, backendParams);
+    //
+    // Create backend using an hdf5 file for reading:
+    //
+    //        Engines::BackendNames backendName;
+    //        backendName = Engines::BackendNames::Hdf5File;
+    //
+    //        Engines::BackendCreationParameters backendParams;
+    //        backendParams.fileName = fileName;
+    //        backendParams.action = Engines::BackendFileActions::Open;
+    //        backendParams.openMode = Engines::BackendOpenModes::Read_Only;
+    //
+    //        Group g = constructBackend(backendName, backendParams);
+    //
+    // Create an in-memory backend:
+    //
+    //        Engines::BackendNames backendName;
+    //        backendName = Engines::BackendNames::ObsStore;
+    //
+    //        Engines::BackendCreationParameters backendParams;
+    //
+    //        Group g = constructBackend(backendName, backendParams);
+    //
+
+    // Create the backend using the command line construct function
     Group g = Engines::constructFromCmdLine(argc, argv, "Example-05a.hdf5");
 
     // Create an ObsGroup object using the ObsGroup::generate function. This function
@@ -119,7 +183,7 @@ int main(int argc, char** argv) {
     newDims.push_back(NewDimensionScale<int>("Location", numLocs, Unlimited, numLocs));
     newDims.push_back(NewDimensionScale<int>("Channel", numChans, numChans, numChans));
 
-    // Construct an ObsGroup object, with 2 dimensions Location, Channel, and attach
+    // Construct an ObsGroup object, with 2 dimensions nlocs, nchans, and attach
     // the backend we constructed above. Under the hood, the ObsGroup::generate function
     // initializes the dimension coordinate values to index numbering 1..n. This can be
     // overwritten with other coordinate values if desired.
@@ -128,8 +192,8 @@ int main(int argc, char** argv) {
     // We now have the top-level group containing the two dimension scales. We need
     // Variable objects for these dimension scales later on for creating variables so
     // build those now.
-    ioda::Variable LocationVar  = og.vars["Location"];
-    ioda::Variable ChannelVar = og.vars["Channel"];
+    ioda::Variable nlocsVar  = og.vars["Location"];
+    ioda::Variable nchansVar = og.vars["Channel"];
 
     // Next let's create the variables. The variable names should be specified using the
     // hierarchy as described above. For example, the variable brightnessTemperature
@@ -148,19 +212,19 @@ int main(int argc, char** argv) {
 
     // Create the variables. Note the use of the createWithScales function. This should
     // always be used when working with an ObsGroup object.
-    Variable tbVar  = og.vars.createWithScales<float>(tbName, {LocationVar, ChannelVar}, float_params);
-    Variable tmVar  = og.vars.createWithScales<float>(tmName, {LocationVar}, float_params);
-    Variable latVar = og.vars.createWithScales<float>(latName, {LocationVar}, float_params);
-    Variable lonVar = og.vars.createWithScales<float>(lonName, {LocationVar}, float_params);
+    Variable tbVar  = og.vars.createWithScales<float>(tbName, {nlocsVar, nchansVar}, float_params);
+    Variable tmVar  = og.vars.createWithScales<float>(tmName, {nlocsVar}, float_params);
+    Variable latVar = og.vars.createWithScales<float>(latName, {nlocsVar}, float_params);
+    Variable lonVar = og.vars.createWithScales<float>(lonName, {nlocsVar}, float_params);
 
     // Add attributes to variables. In this example, we are adding enough attribute
-    // information to allow Panoply to be able to plot the ObsValue/brightnessTemperature
+    // information to allow Panoply to be able to plot the ObsValue/brightness_temperature
     // variable. Note the "coordinates" attribute on tbVar. It is sufficient to just
     // give the variable names (without the group structure) to Panoply (which apparently
     // searches the entire group structure for these names). If you want to follow this
     // example in your code, just give the variable names without the group prefixes
     // to insulate your code from any subsequent group structure changes that might occur.
-    tbVar.atts.add<std::string>("coordinates", {"longitude latitude Channel"}, {1})
+    tbVar.atts.add<std::string>("coordinates", {"longitude latitude nchans"}, {1})
       .add<std::string>("long_name", {"ficticious brightness temperature"}, {1})
       .add<std::string>("units", {"K"}, {1})
       .add<float>("valid_range", {100.0, 400.0}, {2});

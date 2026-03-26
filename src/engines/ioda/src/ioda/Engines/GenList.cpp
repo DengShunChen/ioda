@@ -23,8 +23,10 @@ static ReaderMaker<GenList> maker("GenList");
 // Classes
 
 //-------------------- public functions --------------------------------
-GenList::GenList(const Parameters_ & params, const ReaderCreationParameters & createParams)
-                     : ReaderBase(createParams) {
+GenList::GenList(const Parameters_ & params, const util::DateTime & winStart,
+                 const util::DateTime & winEnd, const eckit::mpi::Comm & comm,
+                 const eckit::mpi::Comm & timeComm, const std::vector<std::string> & obsVarNames)
+                     : ReaderBase(winStart, winEnd, comm, timeComm, obsVarNames) {
     oops::Log::trace() << "ioda::Engines::GenList start constructor" << std::endl;
     // Create a backend backed by memory, and fill with results from the list style generator
     Engines::BackendNames backendName = BackendNames::ObsStore;
@@ -34,7 +36,7 @@ GenList::GenList(const Parameters_ & params, const ReaderCreationParameters & cr
     // Create the in-memory ObsGroup
     NewDimensionScales_t newDims;
     Dimensions_t numLocs = params.lats.value().size();
-    newDims.push_back(ioda::NewDimensionScale<int>("Location", numLocs, numLocs, numLocs));
+    newDims.push_back(ioda::NewDimensionScale<int>("nlocs", numLocs, numLocs, numLocs));
     obs_group_ = ObsGroup::generate(backend, newDims);
 
     // Fill in the ObsGroup with the generated data
@@ -46,44 +48,16 @@ GenList::GenList(const Parameters_ & params, const ReaderCreationParameters & cr
 //-------------------- private functions -------------------------------
 void GenList::genDistList(const GenList::Parameters_ & params) {
     // Grab the parameters
-    const std::vector<float> obsVals = params.obsValues;
     const std::vector<float> obsErrors = params.obsErrors;
-
-    if (!obsErrors.empty()){
-        ASSERT(obsErrors.size() == createParams_.obsVarNames.size());
-    }
-    if (!obsVals.empty()){
-        ASSERT(obsVals.size() == createParams_.obsVarNames.size());
-    }
+    ASSERT(obsErrors.size() == obsVarNames_.size());
 
     const std::vector<float> latVals = params.lats;
     const std::vector<float> lonVals = params.lons;
     const std::vector<int64_t> dts = params.dateTimes;
     const std::string epoch = params.epoch.value();
 
-    std::string vcoordType = "Undefined";
-    std::vector<float> vcoordVals;
-    if ( params.vcoordType.value() != boost::none ) {
-        vcoordType = params.vcoordType.value().get(); 
-
-	if ( vcoordType != "pressure" && vcoordType != "height" ){
-	    throw Exception("Invalid vertical coordinate type, " + vcoordType + ", for GenList. Valid values are 'pressure' or 'height'.", ioda_Here());
-	}
-
-        if ( params.vcoordVals.value() != boost::none ) {
-	    vcoordVals = params.vcoordVals.value().get();
-	} else {
-  	    throw Exception("If vert coord type specified in GenList then vert coords must also be specified.", ioda_Here());
-	}
-    }
-
     // Transfer the specified values to the ObsGroup
-    storeGenData(latVals, lonVals, vcoordType, vcoordVals, dts, epoch, 
-                 createParams_.obsVarNames, obsVals, obsErrors, obs_group_);
-}
-
-std::string GenList::fileName() const {
-   return std::string("/tmp/generate.list.nc4");
+    storeGenData(latVals, lonVals, dts, epoch, obsVarNames_, obsErrors, obs_group_);
 }
 
 void GenList::print(std::ostream & os) const {

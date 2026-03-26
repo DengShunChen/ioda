@@ -1,12 +1,11 @@
 ---
-time window:
-  begin: "2020-12-15T15:00:00Z"
-  end: "2020-12-15T21:00:00Z"
+window begin: "2020-12-15T15:00:00Z"
+window end: "2020-12-15T21:00:00Z"
 
 observations:
 - obs space:
     name: "Locations QC (GOES ABI example)"
-    simulated variables: ['brightnessTemperature']
+    simulated variables: ['brightness_temperature']
     channels: 7-16
     obsdatain:
       engine:
@@ -17,11 +16,9 @@ observations:
         type: H5File
         obsfile: "testoutput/locations_qc_out.nc4"
   test data:
-    gnlocs: 19
-    gnlocs outside time window: 0
-    gnlocs rejected by qc: 81
-    nlocs from source: 100
+    nlocs: 19
     nrecs: 19
+    nvars: 1
     obs perturbations seed: 0
     expected group variables: []
     expected sort variable: ""

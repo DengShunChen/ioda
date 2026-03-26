@@ -17,7 +17,7 @@ import datetime
 if os.environ.get('LIBDIR') is not None:
     sys.path.append(os.environ['LIBDIR'])
 
-from pyioda import ioda_obs_space as ioda_ospace
+import ioda_obs_space as ioda_ospace
 
 testFile = "Example-07b-python.hdf5"
 

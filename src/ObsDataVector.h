@@ -19,7 +19,7 @@
 #include "eckit/exception/Exceptions.h"
 #include "eckit/mpi/Comm.h"
 
-#include "oops/base/ObsVariables.h"
+#include "oops/base/Variables.h"
 #include "oops/util/Logger.h"
 #include "oops/util/missingValues.h"
 #include "oops/util/ObjectCounter.h"
@@ -40,13 +40,12 @@ template <typename DATATYPE> using ObsDataRow = std::vector<DATATYPE>;
 //! ObsDataVector<DATATYPE> handles vectors of data of type DATATYPE in observation space
 
 template<typename DATATYPE>
-class ObsDataVector: public ObsSpaceAssociated,
-                     public util::Printable,
+class ObsDataVector: public util::Printable,
                      private util::ObjectCounter<ObsDataVector<DATATYPE> > {
  public:
   static const std::string classname() {return "ioda::ObsDataVector";}
 
-  ObsDataVector(ObsSpace &, const oops::ObsVariables &,
+  ObsDataVector(ObsSpace &, const oops::Variables &,
                 const std::string & grp = "", const bool fail = true,
                 const bool skipDerived = false);
   ObsDataVector(ObsSpace &, const std::string &,
@@ -54,11 +53,9 @@ class ObsDataVector: public ObsSpaceAssociated,
                 const bool skipDerived = false);
   explicit ObsDataVector(ObsVector &);
   ObsDataVector(const ObsDataVector &);
-  ObsDataVector(ObsDataVector &&);
   ~ObsDataVector();
 
   ObsDataVector & operator= (const ObsDataVector &);
-  ObsDataVector & operator= (ObsDataVector &&);
 
   void zero();
   void mask(const ObsDataVector<int> &);
@@ -90,16 +87,13 @@ class ObsDataVector: public ObsSpaceAssociated,
   ObsDataRow<DATATYPE> & operator[](const std::string var) {return rows_.at(obsvars_.find(var));}
 
   const std::string & obstype() const {return obsdb_.obsname();}
-  const oops::ObsVariables & varnames() const {return obsvars_;}
-
-  void reduce(const std::vector<bool> & keepLocs) override;
-  void append() override;
+  const oops::Variables & varnames() const {return obsvars_;}
 
  private:
-  void print(std::ostream &) const override;
+  void print(std::ostream &) const;
 
   ObsSpace & obsdb_;
-  oops::ObsVariables obsvars_;
+  oops::Variables obsvars_;
   size_t nvars_;
   size_t nlocs_;
   std::vector<ObsDataRow<DATATYPE> > rows_;
@@ -108,15 +102,14 @@ class ObsDataVector: public ObsSpaceAssociated,
 
 // -----------------------------------------------------------------------------
 template <typename DATATYPE>
-ObsDataVector<DATATYPE>::ObsDataVector(ObsSpace & obsdb, const oops::ObsVariables & vars,
+ObsDataVector<DATATYPE>::ObsDataVector(ObsSpace & obsdb, const oops::Variables & vars,
                                        const std::string & grp, const bool fail,
                                        const bool skipDerived)
   : obsdb_(obsdb), obsvars_(vars), nvars_(obsvars_.size()),
     nlocs_(obsdb_.nlocs()), rows_(nvars_),
-    missing_(util::missingValue<DATATYPE>())
+    missing_(util::missingValue(DATATYPE()))
 {
   oops::Log::trace() << "ObsDataVector::ObsDataVector start" << std::endl;
-  obsdb_.attach(*this);
   for (size_t jj = 0; jj < nvars_; ++jj) {
     rows_[jj].resize(nlocs_);
   }
@@ -130,10 +123,9 @@ ObsDataVector<DATATYPE>::ObsDataVector(ObsSpace & obsdb, const std::string & var
                                        const bool skipDerived)
   : obsdb_(obsdb), obsvars_(std::vector<std::string>(1, var)), nvars_(1),
     nlocs_(obsdb_.nlocs()), rows_(1),
-    missing_(util::missingValue<DATATYPE>())
+    missing_(util::missingValue(DATATYPE()))
 {
   oops::Log::trace() << "ObsDataVector::ObsDataVector start" << std::endl;
-  obsdb_.attach(*this);
   rows_[0].resize(nlocs_);
   if (!grp.empty()) this->read(grp, fail, skipDerived);
   oops::Log::trace() << "ObsDataVector::ObsDataVector done" << std::endl;
@@ -142,11 +134,10 @@ ObsDataVector<DATATYPE>::ObsDataVector(ObsSpace & obsdb, const std::string & var
 template <typename DATATYPE>
 ObsDataVector<DATATYPE>::ObsDataVector(ObsVector & vect)
   : obsdb_(vect.space()), obsvars_(vect.varnames()), nvars_(vect.nvars()), nlocs_(vect.nlocs()),
-    rows_(nvars_), missing_(util::missingValue<DATATYPE>())
+    rows_(nvars_), missing_(util::missingValue(DATATYPE()))
 {
   oops::Log::trace() << "ObsDataVector::ObsDataVector ObsVector start" << std::endl;
-  obsdb_.attach(*this);
-  const double dmiss = util::missingValue<double>();
+  const double dmiss = util::missingValue(dmiss);
   for (size_t jv = 0; jv < nvars_; ++jv) {
     rows_[jv].resize(nlocs_);
   }
@@ -167,26 +158,12 @@ ObsDataVector<DATATYPE>::ObsDataVector(ObsVector & vect)
 template <typename DATATYPE>
 ObsDataVector<DATATYPE>::ObsDataVector(const ObsDataVector & other)
   : obsdb_(other.obsdb_), obsvars_(other.obsvars_), nvars_(other.nvars_),
-    nlocs_(other.nlocs_), rows_(other.rows_), missing_(util::missingValue<DATATYPE>()) {
-  obsdb_.attach(*this);
+    nlocs_(other.nlocs_), rows_(other.rows_), missing_(util::missingValue(DATATYPE())) {
   oops::Log::trace() << "ObsDataVector copied" << std::endl;
 }
 // -----------------------------------------------------------------------------
 template <typename DATATYPE>
-ObsDataVector<DATATYPE>::ObsDataVector(ObsDataVector && other)
-  : obsdb_(other.obsdb_), obsvars_(std::move(other.obsvars_)), nvars_(other.nvars_),
-    nlocs_(other.nlocs_), rows_(std::move(other.rows_)), missing_(util::missingValue<DATATYPE>()) {
-  obsdb_.detach(other);
-  other.nvars_ = 0;
-  other.nlocs_ = 0;
-  obsdb_.attach(*this);
-  oops::Log::trace() << "ObsDataVector moved" << std::endl;
-}
-// -----------------------------------------------------------------------------
-template <typename DATATYPE>
-ObsDataVector<DATATYPE>::~ObsDataVector() {
-  obsdb_.detach(*this);
-}
+ObsDataVector<DATATYPE>::~ObsDataVector() {}
 // -----------------------------------------------------------------------------
 template <typename DATATYPE>
 ObsDataVector<DATATYPE> & ObsDataVector<DATATYPE>::operator= (const ObsDataVector<DATATYPE> & rhs) {
@@ -196,21 +173,6 @@ ObsDataVector<DATATYPE> & ObsDataVector<DATATYPE>::operator= (const ObsDataVecto
   nvars_ = rhs.nvars_;
   nlocs_ = rhs.nlocs_;
   rows_ = rhs.rows_;
-  oops::Log::trace() << "ObsDataVector::operator= done" << std::endl;
-  return *this;
-}
-// -----------------------------------------------------------------------------
-template <typename DATATYPE>
-ObsDataVector<DATATYPE> & ObsDataVector<DATATYPE>::operator= (ObsDataVector<DATATYPE> && rhs) {
-  oops::Log::trace() << "ObsDataVector::operator= start" << std::endl;
-  ASSERT(&obsdb_ == &rhs.obsdb_);
-  obsvars_ = std::move(rhs.obsvars_);
-  nvars_ = rhs.nvars_;
-  nlocs_ = rhs.nlocs_;
-  rows_ = std::move(rhs.rows_);
-  rhs.nvars_ = 0;
-  rhs.nlocs_ = 0;
-  obsdb_.detach(rhs);
   oops::Log::trace() << "ObsDataVector::operator= done" << std::endl;
   return *this;
 }
@@ -239,6 +201,7 @@ template <typename DATATYPE>
 void ObsDataVector<DATATYPE>::read(const std::string & name, const bool fail,
                                    const bool skipDerived) {
   oops::Log::trace() << "ObsDataVector::read, name = " << name << std::endl;
+  const DATATYPE missing = util::missingValue(missing);
 
   // Only need to read data when nlocs_ is greater than 0.
   // e.g. if there is no obs. on current MPI task, no read needed.
@@ -271,7 +234,7 @@ void ObsDataVector<DATATYPE>::save(const std::string & name) const {
 template <typename DATATYPE>
 void ObsDataVector<DATATYPE>::assignToExistingVariables(const ObsVector & vect) {
   oops::Log::trace() << "ObsDataVector::assignToExistingVariables start" << std::endl;
-  const double dmiss = util::missingValue<double>();
+  const double dmiss = util::missingValue(dmiss);
   std::vector<size_t> inds(nvars_);
   for (size_t jv = 0; jv < nvars_; ++jv) {
     rows_[jv].resize(nlocs_);
@@ -296,32 +259,6 @@ void ObsDataVector<DATATYPE>::assignToExistingVariables(const ObsVector & vect) 
   }
   oops::Log::trace() << "ObsDataVector::assignToExistingVariables done" << std::endl;
 }
-// -----------------------------------------------------------------------------
-template <typename DATATYPE>
-void ObsDataVector<DATATYPE>::reduce(const std::vector<bool> & keepLocs) {
-  ASSERT(keepLocs.size() == nlocs_);
-  const size_t nlocs_new = std::count(keepLocs.begin(), keepLocs.end(), true);
-  for (auto & row : rows_) {
-    std::vector<DATATYPE> masked_row(nlocs_new);
-    size_t iloc_new = 0;
-    for (size_t iloc = 0; iloc < row.size(); ++iloc) {
-      if (keepLocs[iloc]) masked_row[iloc_new++] = row[iloc];
-    }
-    row = std::move(masked_row);
-  }
-  nlocs_ = nlocs_new;
-}
-// -----------------------------------------------------------------------------
-template <typename DATATYPE>
-void ObsDataVector<DATATYPE>::append() {
-  const size_t newnlocs = obsdb_.nlocs();
-  for (auto & row : rows_) {
-    row.reserve(newnlocs);
-    row.insert(row.end(), newnlocs - nlocs_, missing_);
-  }
-  nlocs_ = newnlocs;
-}
-
 // -----------------------------------------------------------------------------
 /// Print statistics describing a vector \p obsdatavector of observations taken from \p obsdb
 /// to the stream \p os.
@@ -356,7 +293,7 @@ template <typename DATATYPE>
 void printNumericObsDataVectorStats(const ObsDataVector<DATATYPE> &obsdatavector,
                                     const ObsSpace &obsdb,
                                     std::ostream & os) {
-  const DATATYPE missing = util::missingValue<DATATYPE>();
+  const DATATYPE missing = util::missingValue(missing);
   for (size_t jv = 0; jv < obsdatavector.nvars(); ++jv) {
     DATATYPE zmin = std::numeric_limits<DATATYPE>::max();
     DATATYPE zmax = std::numeric_limits<DATATYPE>::lowest();

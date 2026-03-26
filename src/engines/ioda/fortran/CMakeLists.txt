@@ -6,26 +6,17 @@
 include(Targets)
 
 list(APPEND SRCS_FORTRAN_BINDINGS
-	cxx_string_mod.f90
-	cxx_vector_dbl_mod.f90
-	cxx_vector_int_mod.f90
-	cxx_vector_string_mod.f90
-	f_c_string_mod.f90	
-	ioda_dimensions_mod.f90
-	ioda_attribute_mod.f90
-	ioda_has_attributes_mod.f90
-	ioda_variable_creation_parameters_mod.f90 
-	ioda_variable_mod.f90
-	ioda_has_variables_mod.f90
-	ioda_group_mod.f90
-	ioda_engines_mod.f90
+	ioda_mod.f90
+	ioda_string.f90
+	ioda_vecstring.f90
+	ioda_group.f90
+	ioda_engines.f90
 	)
 
 ecbuild_add_library( TARGET ioda_fortran
                      SOURCES ${SRCS_FORTRAN_BINDINGS}
-                     LINKER_LANGUAGE Fortran )
+                     LINKER_LANGUAGE CXX )
 add_library(ioda::ioda_fortran ALIAS ioda_fortran)
-
 set_target_properties(ioda_fortran PROPERTIES Fortran_PREPROCESS ON)
 if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
 	target_compile_options(ioda_fortran PRIVATE -ffree-line-length-none)
@@ -39,7 +30,7 @@ target_include_directories(ioda_fortran INTERFACE
                                 $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/${MODULE_DIR}>
                                 $<INSTALL_INTERFACE:${MODULE_DIR}>)
 
-target_link_libraries(ioda_fortran PUBLIC ioda_engines stdc++)
+target_link_libraries(ioda_fortran PUBLIC ioda_engines)
 AddLib(ioda_fortran SHARED ioda_fortran ${PROJECT_NAME}-targets)
 
 target_include_directories(ioda_fortran PUBLIC

@@ -14,8 +14,8 @@
 #include "oops/util/parameters/Parameters.h"
 
 #include "ioda/Engines/EngineUtils.h"
-#include "ioda/Engines/ReaderFactory.h"
-#include "ioda/Engines/WriterFactory.h"
+#include "ioda/Engines/ReaderBase.h"
+#include "ioda/Engines/WriterBase.h"
 
 namespace ioda {
 
@@ -48,6 +48,9 @@ struct ParameterTraits<ioda::MissingSortValueTreatment> :
 
 namespace ioda {
 
+// A frame size of 10000 lines up with the default frame size in the ODC library.
+constexpr int DefaultFrameSize = 10000;
+
 /// \brief Options controlling the manner in which observations are grouped into records.
 class ObsGroupingParameters : public oops::Parameters {
     OOPS_CONCRETE_PARAMETERS(ObsGroupingParameters, Parameters)
@@ -77,16 +80,11 @@ class ObsDataInParameters : public oops::Parameters {
     /// options controlling obs record grouping
     oops::Parameter<ObsGroupingParameters> obsGrouping{"obsgrouping", { }, this};
 
-    /// type of file preparation, internal (by the reader) or external (before this run)
-    oops::Parameter<std::string> prepType{"file preparation type", "internal", this};
-
     /// option controlling the creation of the backend
     oops::RequiredParameter<Engines::ReaderParametersWrapper> engine{"engine", this};
 
-    /// true if underlying engine is a file backend
-    bool isFileBackend() const {
-      return this->engine.value().engineParameters.value().isFileBackend();
-    }
+    /// maximum frame size
+    oops::Parameter<int> maxFrameSize{"max frame size", DefaultFrameSize, this};
 };
 
 class ObsDataOutParameters : public oops::Parameters {

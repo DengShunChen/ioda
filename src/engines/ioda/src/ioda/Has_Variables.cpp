@@ -220,7 +220,7 @@ void Has_Variables_Base::convertVariableUnits(std::ostream& out) {
           convertColumn(unit.second, outputData);
           variableToConvert.write(outputData);
           variableToConvert.atts.add<std::string>("units", getSIUnit(unit.second));
-        } catch (const std::invalid_argument&) {
+        } catch (std::invalid_argument) {
           out << "The unit specified in ODB mapping file '" << unit.second
               << "' does not have a unit conversion defined in"
               << " UnitConversions.h, and the variable will be stored in"
@@ -403,10 +403,8 @@ Variable Has_Variables_Base::create(const std::string& name, const Type& in_memo
 
     std::vector<Dimensions_t> fixed_max_dimensions
       = (max_dimensions.size()) ? max_dimensions : dimensions;
-
     auto newVar = backend_->create(layout_->doMap(name), in_memory_dataType, dimensions,
                                    fixed_max_dimensions, params);
-
     params.applyImmediatelyAfterVariableCreation(newVar);
     if (layout_->name() == std::string("ObsGroup ODB v1") && !(layout_->isMapped(name) ||
                                                                layout_->isComplementary(name) ||

@@ -1,7 +1,6 @@
 ---
-time window:
-  begin: "2018-04-14T21:00:00Z"
-  end: "2018-04-15T03:00:00Z"
+window begin: "2018-04-14T21:00:00Z"
+window end: "2018-04-15T03:00:00Z"
 
 observations:
 - obs space:
@@ -13,11 +12,9 @@ observations:
         obsfile: "Data/testinput_tier_1/datetime_new.nc4"
     obs perturbations seed: 0
   test data:
-    gnlocs: 9
-    gnlocs outside time window: 1
-    gnlocs rejected by qc: 0
-    nlocs from source: 10
+    nlocs: 9
     nrecs: 9
+    nvars: 1
     obs perturbations seed: 0
     expected group variables: []
     expected sort variable: ""
@@ -51,11 +48,9 @@ observations:
         obsfile: "Data/testinput_tier_1/datetime_old.nc4"
     obs perturbations seed: 0
   test data:
-    gnlocs: 10
-    gnlocs outside time window: 0
-    gnlocs rejected by qc: 0
-    nlocs from source: 10
+    nlocs: 10
     nrecs: 10
+    nvars: 1
     obs perturbations seed: 0
     expected group variables: []
     expected sort variable: ""

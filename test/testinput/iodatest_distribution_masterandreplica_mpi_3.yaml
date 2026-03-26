@@ -1,7 +1,6 @@
 ---
-time window:
-  begin: 2021-01-15T00:00:00Z
-  end:   2021-01-16T00:00:00Z
+window begin: 2021-01-15T00:00:00Z
+window end:   2021-01-16T00:00:00Z
 
 # Expected indices are based on 3 PE's during an MPI run. If you change
 # the number of PE in the ecbuild_add_test in the ../CMakeLists.txt file,
@@ -21,7 +20,7 @@ observations:
         obsfile: Data/testinput_tier_1/obsspace_grouping.nc4
       obsgrouping:
         group variables: [group_by_int]
-        # MetaData/group_by_int = 1, 1, 1, 2, 3, 3, 1, 1, 1, 1 ;
+        # group_by_int@MetaData = 1, 1, 1, 2, 3, 3, 1, 1, 1, 1 ;
     simulated variables: [temperature]
     distribution:
       name: RoundRobin
@@ -60,7 +59,7 @@ observations:
         obsfile: Data/testinput_tier_1/obsspace_grouping.nc4
       obsgrouping:
         group variables: [group_by_int]
-        # MetaData/group_by_int = 1, 1, 1, 2, 3, 3, 1, 1, 1, 1 ;
+        # group_by_int@MetaData = 1, 1, 1, 2, 3, 3, 1, 1, 1, 1 ;
     simulated variables: [temperature]
     distribution:
       name: InefficientDistribution

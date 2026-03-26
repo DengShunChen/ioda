@@ -16,8 +16,8 @@
 #include "eckit/testing/Test.h"
 
 #include "ioda/Engines/EngineUtils.h"
-#include "ioda/Engines/ReaderFactory.h"
-#include "ioda/Engines/WriterFactory.h"
+#include "ioda/Engines/ReaderBase.h"
+#include "ioda/Engines/WriterBase.h"
 #include "ioda/Exception.h"
 #include "ioda/Group.h"
 #include "ioda/ObsGroup.h"
@@ -84,22 +84,17 @@ CASE("ioda/GlobalAttributeCheck") {
     EngineFactoryTestCaseParameters params;
     params.validateAndDeserialize(testCaseConfig);
 
-    bool isParallelIo = (oops::mpi::world().size() > 1);
     std::unique_ptr<Engines::ReaderBase> testReaderEngine;
     std::unique_ptr<Engines::WriterBase> testWriterEngine;
     if (params.obsDataIn.value() != boost::none) {
-      eckit::LocalConfiguration timeWindowConfig;
-      timeWindowConfig.set("begin", "2018-04-14T21:00:00Z");
-      timeWindowConfig.set("end", "2018-04-15T03:00:00Z");
-
-      Engines::ReaderCreationParameters createParams
-        (util::TimeWindow(timeWindowConfig),
-         oops::mpi::world(), oops::mpi::myself(), params.obsVarNames, isParallelIo);
       testReaderEngine = Engines::ReaderFactory::create(
-          params.obsDataIn.value()->engine.value().engineParameters, createParams);
+          params.obsDataIn.value()->engine.value().engineParameters,
+          util::DateTime("2018-04-14T21:00:00Z"), util::DateTime("2018-04-15T03:00:00Z"),
+          oops::mpi::world(), oops::mpi::myself(), params.obsVarNames);
       oops::Log::info() << "Reader source: " << *testReaderEngine << std::endl;
     } else if (params.obsDataOut.value() != boost::none) {
       bool createMultipleFiles = false;
+      bool isParallelIo = (oops::mpi::world().size() > 1);
       Engines::WriterCreationParameters createParams(oops::mpi::world(), oops::mpi::myself(),
                                         createMultipleFiles, isParallelIo);
       testWriterEngine = Engines::WriterFactory::create(

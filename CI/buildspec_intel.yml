@@ -57,7 +57,8 @@ phases:
       - echo ${CODEBUILD_RESOLVED_SOURCE_VERSION} > /jcsda/artifacts/commit_sha.txt
 
       - cd CI
-      - source /opt/spack-environment/activate.sh
+      - source /etc/profile.d/z10_spack_environment.sh
+      - cat /etc/profile.d/z10_spack_environment.sh
       - source /opt/intel/oneapi/compiler/latest/env/vars.sh
       - source /opt/intel/oneapi/mpi/latest/env/vars.sh
 

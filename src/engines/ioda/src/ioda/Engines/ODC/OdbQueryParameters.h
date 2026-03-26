@@ -94,7 +94,7 @@ class OdbWhereParameters : public oops::Parameters {
       "varno", this};
   /// Optional free-form query
   oops::Parameter<std::string> query{
-      "query", "", this};
+    "query", "", this};
 };
 
 class OdbVariableCreationParameters : public oops::Parameters {
@@ -109,9 +109,6 @@ class OdbVariableCreationParameters : public oops::Parameters {
   oops::Parameter<int64_t> missingInt64{"missingInt64",
                                         -9223372036854775806, this};
 
-  /// The name of a time displacement variable which is added to the dateTime at each location.
-  /// If this name is blank (the default) then no displacement will be applied.
-  oops::Parameter<std::string> timeDisplacement{"time displacement variable", "", this};
 };
 
 class OdbQueryParameters : public oops::Parameters {
@@ -130,9 +127,6 @@ class OdbQueryParameters : public oops::Parameters {
   /// Truncate multi-level profiles to the `numlev` parameter.
   /// This parameter only has an effect for sonde and oceansound data.
   oops::Parameter<bool> truncateProfilesToNumLev{"truncate profiles to numlev", false, this};
-
-  /// Construct station ID from multiple ODB variables.
-  oops::Parameter<bool> constructStationID{"construct station ID", false, this};
 };
 
 }  // namespace ODC

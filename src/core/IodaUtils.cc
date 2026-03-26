@@ -162,7 +162,6 @@ util::DateTime getEpochAsDtime(const Variable & dtVar) {
 
 //------------------------------------------------------------------------------------
 void openCreateEpochDtimeVar(const std::string & groupName, const std::string & varName,
-                             const std::size_t globalNlocs,
                              const util::DateTime & newEpoch, Variable & epochDtVar,
                              Has_Variables & destVarContainer) {
   std::string fullVarName = groupName + "/" + varName;
@@ -171,13 +170,8 @@ void openCreateEpochDtimeVar(const std::string & groupName, const std::string & 
     epochDtVar = destVarContainer.open(fullVarName);
   } else {
     // Variable does not exist, need to create it. Use the newEpoch for the units attribute.
-    std::vector<Variable> dimVars(1, destVarContainer.open("Location"));
-    VariableCreationParameters params = VariableCreationParameters::defaults<int64_t>();
-    // Don't want compression in the memory image.
-    params.noCompress();
-    std::vector<ioda::Dimensions_t> chunkDims(1, VarUtils::getLocationChunkSize(globalNlocs));
-    params.setChunks(chunkDims);
-    epochDtVar = destVarContainer.createWithScales<int64_t>(fullVarName, dimVars, params);
+    std::vector<Variable> dimVars(1, destVarContainer.open("nlocs"));
+    epochDtVar = destVarContainer.createWithScales<int64_t>(fullVarName, dimVars);
     std::string epochString = "seconds since " + newEpoch.toString();
     epochDtVar.atts.add("units", epochString);
   }
@@ -198,8 +192,8 @@ std::vector<util::DateTime> convertDtStringsToDtime(const std::vector<std::strin
 //------------------------------------------------------------------------------------
 std::vector<util::DateTime> convertEpochDtToDtime(const util::DateTime epochDtime,
                                                   const std::vector<int64_t> & timeOffsets) {
-  const util::DateTime missingDateTime = util::missingValue<util::DateTime>();
-  const int64_t missingInt64 = util::missingValue<int64_t>();
+  const util::DateTime missingDateTime = util::missingValue(missingDateTime);
+  const int64_t missingInt64 = util::missingValue(missingInt64);
   std::vector<util::DateTime> dateTimes;
   dateTimes.reserve(timeOffsets.size());
   for (std::size_t i = 0; i < timeOffsets.size(); ++i) {
@@ -216,8 +210,8 @@ std::vector<util::DateTime> convertEpochDtToDtime(const util::DateTime epochDtim
 //------------------------------------------------------------------------------------
 std::vector<int64_t> convertDtimeToTimeOffsets(const util::DateTime epochDtime,
                                                const std::vector<util::DateTime> & dtimes) {
-  const util::DateTime missingDateTime = util::missingValue<util::DateTime>();
-  const int64_t missingInt64 = util::missingValue<int64_t>();
+  const util::DateTime missingDateTime = util::missingValue(missingDateTime);
+  const int64_t missingInt64 = util::missingValue(missingInt64);
   std::vector<int64_t> timeOffsets(dtimes.size());
   for (std::size_t i = 0; i < dtimes.size(); ++i) {
     if (dtimes[i] == missingDateTime) {
@@ -324,17 +318,6 @@ std::string convertNewVnameToOldVname(const std::string & varName) {
         oldFormat = vname + std::string("@") + gname;
     }
     return oldFormat;
-}
-// -----------------------------------------------------------------------------
-bool checkFileExists(const std::string & filePathToCheck) {
-  bool fileExists;
-  std::ifstream filePath(filePathToCheck);
-  if (filePath) {
-    fileExists = true;
-  } else {
-    fileExists = false;
-  }
-  return fileExists;
 }
 
 // -----------------------------------------------------------------------------

@@ -42,11 +42,14 @@ class ObsDataVecTestFixture : private boost::noncopyable {
 
   ObsDataVecTestFixture() {
     const eckit::Configuration &conf = ::test::TestEnvironment::config();
-    const util::TimeWindow timeWindow(conf.getSubConfiguration("time window"));
+    const util::DateTime bgn(conf.getString("window begin"));
+    const util::DateTime end(conf.getString("window end"));
 
     eckit::LocalConfiguration obsconf(conf, "obs space");
-    obspace_ = boost::make_unique<ObsSpace_>(obsconf, oops::mpi::world(),
-                                             timeWindow, oops::mpi::myself());
+    ioda::ObsTopLevelParameters obsparams;
+    obsparams.validateAndDeserialize(obsconf);
+    obspace_ = boost::make_unique<ObsSpace_>(obsparams, oops::mpi::world(),
+                                             bgn, end, oops::mpi::myself());
   }
 
   std::unique_ptr<ObsSpace_> obspace_;
@@ -65,7 +68,7 @@ template <typename T>
 void testPrint(const std::string &datatype) {
   eckit::LocalConfiguration conf(::test::TestEnvironment::config(), "print." + datatype);
 
-  const oops::ObsVariables vars(conf, "variables");
+  const oops::Variables vars(conf, "variables");
   const std::string group = conf.getString("group");
   const ioda::ObsDataVector<T> vector(ObsDataVecTestFixture::obspace(), vars, group);
 
@@ -80,7 +83,7 @@ void testAssignToExistingVariables(const std::string &testtype) {
   eckit::LocalConfiguration conf(::test::TestEnvironment::config(),
                                 "assignToExistingVariables." + testtype);
 
-  const oops::ObsVariables ObsDataVectorVars(conf, "ObsDataVector variables");
+  const oops::Variables ObsDataVectorVars(conf, "ObsDataVector variables");
   const std::string group = conf.getString("group");
   // known good output:
   const ioda::ObsDataVector<float> ObsDataVect(ObsDataVecTestFixture::obspace(),
@@ -110,7 +113,7 @@ void testAssignToExistingVariables(const std::string &testtype) {
 void testRead(const std::string & description) {
   eckit::LocalConfiguration conf(::test::TestEnvironment::config(), "read." + description);
 
-  const oops::ObsVariables vars(conf, "variables");
+  const oops::Variables vars(conf, "variables");
   const std::string group = conf.getString("group");
   ioda::ObsDataVector<float> vector(ObsDataVecTestFixture::obspace(), vars, group);
 

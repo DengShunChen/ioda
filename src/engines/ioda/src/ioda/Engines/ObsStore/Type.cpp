@@ -13,7 +13,6 @@
 #include "./Type.hpp"
 
 #include <functional>
-#include <map>
 #include <numeric>
 #include <stdexcept>
 
@@ -25,13 +24,13 @@ namespace ObsStore {
 
 //---------------------------------------------------------------------------------------
 Type::Type() : dims_({}), type_(ObsTypes::NOTYPE), class_(ObsTypeClasses::NOCLASS),
-               base_type_(nullptr), num_elements_(0), size_(0), is_signed_(false) {
+               base_type_(nullptr), size_(0), num_elements_(0), is_signed_(false) {
 }
 
 Type::Type(const ObsTypes dataType, const ObsTypeClasses typeClass,
            const std::size_t typeSize, const bool isTypeSigned)
                : dims_({}), type_(dataType), class_(typeClass), base_type_(nullptr),
-                 num_elements_(1), size_(typeSize), is_signed_(isTypeSigned) {
+                 size_(typeSize), num_elements_(1), is_signed_(isTypeSigned) {
 }
 
 Type::Type(const std::vector<std::size_t> & dims, const ObsTypes dataType,
@@ -80,44 +79,6 @@ bool Type::operator==(const Type & rhs) const {
 
 bool Type::operator!=(const Type & rhs) const {
   return !(*this == rhs);
-}
-
-detail::Engines::HH::HH_Type Type::getHDF5Type() const {
-  // We can look at ObsTypes using getType() or type_ and return the matching HDF5 type.
-  using namespace detail::Engines::HH;
-  static auto HH_default_string_type
-    = std::dynamic_pointer_cast<HH_Type>(HH_Type_Provider::instance()->makeStringType(
-        typeid(char),Types::constants::_Variable_Length, StringCSet::UTF8).getBackend());
-
-  static const std::map<ObsTypes, HH_Type> mappings{
-    {ObsTypes::FLOAT, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(float))}},
-    {ObsTypes::DOUBLE, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(double))}},
-    {ObsTypes::LDOUBLE, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(long double))}},
-    {ObsTypes::SCHAR, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(signed char))}},
-    {ObsTypes::SHORT, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(short))}},
-    {ObsTypes::INT, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(int))}},
-    {ObsTypes::LONG, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(long))}},
-    {ObsTypes::LLONG, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(long long))}},
-    {ObsTypes::UCHAR, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(unsigned char))}},
-    {ObsTypes::UINT, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(unsigned int))}},
-    {ObsTypes::USHORT, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(unsigned short))}},
-    {ObsTypes::ULONG, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(unsigned long))}},
-    {ObsTypes::ULLONG, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(unsigned long long))}},
-    {ObsTypes::CHAR, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(char))}},
-    // No support for wchars, char16, char32. Unimplemented in the hdf5 backend's
-    // current iteration of the type system, and unused in ioda.
-    //{ObsTypes::WCHAR, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(wchar_t))}},
-    //{ObsTypes::CHAR16, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(char16_t))}},
-    //{ObsTypes::CHAR32, HH_Type{HH_Type_Provider::getFundamentalHHType(typeid(char32_t))}}
-    // No support for array types
-    //{ObsTypes::ARRAY, ...}
-    // We do support a single basic string type. ObsStore doesn't track the string's
-    // character set, length, or padding information, so we assume some defaults
-    // for the type conversion.
-    {ObsTypes::STRING, *HH_default_string_type.get()}
-  };
-  if (!mappings.count(getType())) throw Exception("Unimplemented mapping", ioda_Here());
-  return mappings.at(getType());
 }
 
 //---------------------------------------------------------------------------------------

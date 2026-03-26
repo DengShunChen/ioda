@@ -67,7 +67,7 @@ void HH_Type::commitToBackend(Group &g, const std::string &name) const {
                             H5P_DEFAULT,
                             H5P_DEFAULT);
     if (res < 0) throw Exception("H5Tcommit2 failed.", ioda_Here());
-  } catch (const std::bad_cast&) {
+  } catch (std::bad_cast) {
     throw Exception("Group passed to function is not an HDF5 group.", ioda_Here());
   }
 }
@@ -133,8 +133,8 @@ HH_hid_t HH_Type_Provider::getFundamentalHHType(std::type_index type) {
        {typeid(long long int), {H5T_NATIVE_LLONG}},            // NOLINT
        {typeid(unsigned long long int), {H5T_NATIVE_ULLONG}},  // NOLINT
        {typeid(signed char), {H5T_NATIVE_SCHAR}},              // NOLINT
-       {typeid(unsigned char), {H5T_NATIVE_UCHAR}},            // NOLINT
-       {typeid(char), {H5T_NATIVE_CHAR}},                      // NOLINT
+       //{typeid(unsigned char), {H5T_NATIVE_U}},
+       {typeid(char), {H5T_NATIVE_CHAR}},  // NOLINT
        //{typeid(wchar_t), {H5T_NATIVE_HBOOL}},
        //{typeid(char16_t), {H5T_NATIVE_HBOOL}},
        //{typeid(char32_t), {H5T_NATIVE_HBOOL}},

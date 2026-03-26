@@ -14,7 +14,7 @@ import numpy as np
 if os.environ.get('LIBDIR') is not None:
     sys.path.append(os.environ['LIBDIR'])
 
-from pyioda import ioda_obs_space as ioda_ospace
+import ioda_obs_space as ioda_ospace
 
 # grab arguments
 print(sys.argv)
@@ -29,18 +29,18 @@ print(f"INFO: list of dimensions:{obsspace.dimensions}")
 print(f"INFO: all available variables in {obsspace}: {obsspace.variables}")
 
 # read a sample variable from the file
-testvar = obsspace.Variable('HofX/brightnessTemperature')
+testvar = obsspace.Variable('hofx/brightness_temperature')
 
 # grab the actual values for this variable
 testdata = testvar.read_data()
 
 # print some stats from the testdata
-print(f"INFO: HofX/brightnessTemperature min: {np.nanmin(testdata)}")
-print(f"INFO: HofX/brightnessTemperature max: {np.nanmax(testdata)}")
-print(f"INFO: HofX/brightnessTemperature mean: {np.nanmean(testdata)}")
+print(f"INFO: hofx/brightness_temperature min: {np.nanmin(testdata)}")
+print(f"INFO: hofx/brightness_temperature max: {np.nanmax(testdata)}")
+print(f"INFO: hofx/brightness_temperature mean: {np.nanmean(testdata)}")
 
 # read the times
-timevar = obsspace.Variable('MetaData/dateTime')
+timevar = obsspace.Variable('MetaData/datetime')
 timedata = timevar.read_data()
 
 # print the first and last times

@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "ioda/Engines/ReaderBase.h"
-#include "ioda/Engines/ReaderFactory.h"
 #include "ioda/Engines/ODC.h"
 
 namespace ioda {
@@ -27,11 +26,7 @@ class ReadOdbFileParameters : public ReaderParametersBase {
 
   public:
     /// \brief Path to input file
-    oops::Parameter<std::string> fileName{"obsfile", "", this};
-
-    /// \brief Paths to multiple input file
-    oops::Parameter<std::vector<std::string>> fileNames{"obsfiles", { }, this};
-
+    oops::RequiredParameter<std::string> fileName{"obsfile", this};
 
     /// \brief Path to varno mapping file
     oops::RequiredParameter<std::string> mappingFileName{"mapping file", this};
@@ -43,19 +38,6 @@ class ReadOdbFileParameters : public ReaderParametersBase {
     /// out profiles which contain a varying number of levels.
     /// Optional: defaults to zero.
     oops::Parameter<int> maxNumberChannels{"max number channels", 0, this};
-
-    /// \brief Extended lower bound of time window (datetime in ISO-8601 format).
-    oops::OptionalParameter<util::DateTime>
-      timeWindowExtendedLowerBound{"time window extended lower bound", this};
-
-    /// \brief action to take if input file is missing
-    /// \details the error action is the default which will write an error message
-    /// and throw an exception stopping the execution.
-    oops::Parameter<std::string> missingFileAction{"missing file action", "error", this};
-
-    bool isFileBackend() const override { return true; }
-
-    std::string getFileName() const override { return fileName.value(); }
 };
 
 // Classes
@@ -65,9 +47,10 @@ class ReadOdbFile: public ReaderBase {
   typedef ReadOdbFileParameters Parameters_;
 
   // Constructor via parameters
-  ReadOdbFile(const Parameters_ & params, const ReaderCreationParameters & createParams);
+  ReadOdbFile(const Parameters_ & params, const util::DateTime & winStart,
+              const util::DateTime & winEnd, const eckit::mpi::Comm & comm,
+              const eckit::mpi::Comm & timeComm, const std::vector<std::string> & obsVarNames);
 
-  std::string fileName() const override;
   void print(std::ostream & os) const override;
 
  private:

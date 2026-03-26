@@ -27,9 +27,8 @@ ObsVector::ObsVector(ObsSpace & obsdb,
                        : obsdb_(obsdb), obsvars_(obsdb.assimvariables()),
                          nvars_(obsvars_.variables().size()), nlocs_(obsdb_.nlocs()),
                          values_(nlocs_ * nvars_),
-                         missing_(util::missingValue<double>()) {
+                         missing_(util::missingValue(missing_)) {
   oops::Log::trace() << "ObsVector::ObsVector " << name << std::endl;
-  obsdb_.attach(*this);
   if (!name.empty()) this->read(name);
 }
 
@@ -38,42 +37,14 @@ ObsVector::ObsVector(const ObsVector & other)
   : obsdb_(other.obsdb_), obsvars_(other.obsvars_), nvars_(other.nvars_),
     nlocs_(other.nlocs_), values_(nlocs_ * nvars_), missing_(other.missing_) {
   values_ = other.values_;
-  obsdb_.attach(*this);
   oops::Log::trace() << "ObsVector copied " << std::endl;
 }
 // -----------------------------------------------------------------------------
-ObsVector::ObsVector(ObsVector && other)
-  : obsdb_(other.obsdb_), obsvars_(std::move(other.obsvars_)), nvars_(other.nvars_),
-    nlocs_(other.nlocs_), values_(std::move(other.values_)), missing_(other.missing_) {
-  obsdb_.detach(other);
-  obsdb_.attach(*this);
-  other.nvars_ = 0;
-  other.nlocs_ = 0;
-  oops::Log::trace() << "ObsVector moved " << std::endl;
-}
-// -----------------------------------------------------------------------------
 ObsVector::~ObsVector() {
-  obsdb_.detach(*this);
 }
 // -----------------------------------------------------------------------------
 ObsVector & ObsVector::operator= (const ObsVector & rhs) {
-  ASSERT(&obsdb_ == &rhs.obsdb_);
-  obsvars_ = rhs.obsvars_;
-  nvars_ = rhs.nvars_;
-  nlocs_ = rhs.nlocs_;
   values_ = rhs.values_;
-  return *this;
-}
-// -----------------------------------------------------------------------------
-ObsVector & ObsVector::operator= (ObsVector && rhs) {
-  ASSERT(&obsdb_ == &rhs.obsdb_);
-  obsvars_ = std::move(rhs.obsvars_);
-  nvars_ = rhs.nvars_;
-  nlocs_ = rhs.nlocs_;
-  values_ = std::move(rhs.values_);
-  rhs.nvars_ = 0;
-  rhs.nlocs_ = 0;
-  obsdb_.detach(rhs);
   return *this;
 }
 // -----------------------------------------------------------------------------
@@ -176,30 +147,6 @@ void ObsVector::axpy(const std::vector<double> & beta, const ObsVector & y) {
   }
 }
 // -----------------------------------------------------------------------------
-void ObsVector::axpy_byrecord(const std::vector<double> & beta, const ObsVector & y) {
-  const size_t nrecs = obsdb_.nrecs();
-  ASSERT(y.values_.size() == values_.size());
-  ASSERT(beta.size() == nrecs * nvars_);
-
-  // all record numbers on this task (the values of the record numbers are global)
-  const std::vector<size_t> recnums = obsdb_.recidx_all_recnums();
-  size_t ivec = 0;
-  for (size_t jloc = 0; jloc < nlocs_; ++jloc) {
-    // rec_value is the global record number at this location
-    const std::size_t rec_value = obsdb_.recnum()[jloc];
-    // map between the global record numbers and the index in the records on this MPI task
-    const std::size_t recidxLocal = std::distance(recnums.begin(),
-                                    std::find(recnums.begin(), recnums.end(), rec_value));
-    for (size_t jvar = 0; jvar < nvars_; ++jvar, ++ivec) {
-      if (values_[ivec] == missing_ || y.values_[ivec] == missing_) {
-        values_[ivec] = missing_;
-      } else {
-        values_[ivec] += beta[recidxLocal * nvars_ + jvar] * y.values_[ivec];
-      }
-    }
-  }
-}
-// -----------------------------------------------------------------------------
 void ObsVector::invert() {
   for (size_t jj = 0; jj < values_.size() ; ++jj) {
     if (values_[jj] != missing_) {
@@ -209,21 +156,9 @@ void ObsVector::invert() {
 }
 // -----------------------------------------------------------------------------
 void ObsVector::random() {
-  const size_t globalnobs = obsdb_.sourceNumLocs() * nvars_;
-  std::vector<double> perts(globalnobs);
-
-  if (obsdb_.comm().rank() == 0) {
-    util::NormalDistribution<double> x(globalnobs, 0.0, 1.0, this->getSeed());
-    perts = x.data();
-  }
-
-  obsdb_.comm().broadcast(perts, 0);
-
-  for (size_t jloc = 0; jloc < nlocs_; ++jloc) {
-    const size_t xindex = obsdb_.index()[jloc];
-    for (size_t jvar = 0; jvar < nvars_; ++jvar) {
-      values_[jloc * nvars_ + jvar] = perts[xindex * nvars_ + jvar];
-    }
+  util::NormalDistribution<double> x(values_.size(), 0.0, 1.0, this->getSeed());
+  for (size_t jj = 0; jj < values_.size() ; ++jj) {
+    values_[jj] = x[jj];
   }
 }
 // -----------------------------------------------------------------------------
@@ -246,40 +181,6 @@ std::vector<double> ObsVector::multivar_dot_product_with(const ObsVector & other
     }
     result[jvar] = dotProduct(*obsdb_.distribution(), 1, x1, x2);
   }
-  // Communication between time subwindows is handled at oops level for `dot_product_with`,
-  // but is not handled for this method which is used in ufo to compute the bias correction
-  // coefficients updates. Handle it here.
-  // TODO(Someone): the time communicator handling needs to only happen at the oops level, the
-  // code here should not handle this at all. The code that calls this method needs refactoring.
-  obsdb_.commTime().allReduceInPlace(result.begin(), result.end(), eckit::mpi::sum());
-  return result;
-}
-// -----------------------------------------------------------------------------
-std::vector<double> ObsVector::multivarrec_dot_product_with(const ObsVector & other) const {
-  const size_t nrecs = obsdb_.nrecs();
-  std::vector<double> result(nrecs * nvars_, 0);
-  size_t recidxLocal = 0;
-  // loop over records on this task; irec is for indexing within recidx_vector,
-  // recidxLocal is the local record index
-  for (auto irec = obsdb_.recidx_begin(); irec != obsdb_.recidx_end();
-       ++irec, ++recidxLocal) {
-    std::vector<size_t> rec_idx = obsdb_.recidx_vector(irec);
-    const size_t nlocsInRec = rec_idx.size();
-    for (size_t jvar = 0; jvar < nvars_; ++jvar) {
-      // Note: no communication is needed here since the dot product is done record by
-      // record, and locations within a given record cannot be split up across MPI tasks.
-      for (size_t jloc = 0; jloc < nlocsInRec; ++jloc) {
-        result[recidxLocal * nvars_ + jvar] += values_[rec_idx[jloc] * nvars_ + jvar] *
-                                               other.values_[rec_idx[jloc] * nvars_ + jvar];
-      }
-    }
-  }
-  // Communication between time subwindows is handled at oops level for `dot_product_with`,
-  // but is not handled for this method which is used in ufo to compute the bias correction
-  // coefficients updates. Handle it here.
-  // TODO(Someone): the time communicator handling needs to only happen at the oops level, the
-  // code here should not handle this at all. The code that calls this method needs refactoring.
-  obsdb_.commTime().allReduceInPlace(result.begin(), result.end(), eckit::mpi::sum());
   return result;
 }
 // -----------------------------------------------------------------------------
@@ -359,8 +260,8 @@ ObsVector & ObsVector::operator=(const ObsDataVector<float> & rhs) {
   oops::Log::trace() << "ObsVector::operator= start" << std::endl;
   ASSERT(&rhs.space() == &obsdb_);
   ASSERT(rhs.nlocs() == nlocs_);
-  const float  fmiss = util::missingValue<float>();
-  const double dmiss = util::missingValue<double>();
+  const float  fmiss = util::missingValue(fmiss);
+  const double dmiss = util::missingValue(dmiss);
   size_t ii = 0;
   for (size_t jl = 0; jl < nlocs_; ++jl) {
     for (size_t jv = 0; jv < nvars_; ++jv) {
@@ -397,24 +298,6 @@ const double & ObsVector::toFortran() const {
 // -----------------------------------------------------------------------------
 double & ObsVector::toFortran() {
   return values_[0];
-}
-// -----------------------------------------------------------------------------
-void ObsVector::reduce(const std::vector<bool> & keepLocs) {
-  ASSERT(keepLocs.size() == nlocs_);
-  auto newEnd = std::remove_if(values_.begin(), values_.end(),
-                               [&](const auto& element) {
-                                  return !keepLocs[(&element - &values_[0]) / nvars_];
-                               });
-  values_.erase(newEnd, values_.end());
-  ASSERT(values_.size() % nvars_ == 0);
-  nlocs_ = values_.size() / nvars_;
-}
-// -----------------------------------------------------------------------------
-void ObsVector::append() {
-  const size_t newnlocs = obsdb_.nlocs();
-  values_.reserve(newnlocs);
-  values_.insert(values_.end(), (newnlocs - nlocs_) * nvars_, missing_);
-  nlocs_ = newnlocs;
 }
 // -----------------------------------------------------------------------------
 void ObsVector::print(std::ostream & os) const {

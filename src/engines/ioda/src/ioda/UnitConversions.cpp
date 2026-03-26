@@ -19,7 +19,7 @@ void convertColumn(const std::string &unit, std::vector<double> &dataToConvert) 
     for (double& value : dataToConvert) {
       value = conversionFunction(value);
     }
-  } catch (const std::out_of_range&) {
+  } catch (std::out_of_range) {
     throw Exception("unit does not have a defined unit conversion equation", ioda_Here())
       .add("unit", unit);
   }
@@ -28,7 +28,7 @@ std::string getSIUnit(const std::string &unit) {
   try {
     std::string siUnit = detail::equivalentSIUnit.at(unit);
     return siUnit;
-  } catch (const std::out_of_range&) {
+  } catch (std::out_of_range) {
     throw Exception("unit does not have a defined unit conversion equation", ioda_Here())
       .add("unit", unit);
   }

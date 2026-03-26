@@ -55,15 +55,18 @@ class ObsSpaceTestFixture : private boost::noncopyable {
   }
 
   ObsSpaceTestFixture(): ospaces_() {
-    const util::TimeWindow timeWindow
-      (::test::TestEnvironment::config().getSubConfiguration("time window"));
+    util::DateTime bgn(::test::TestEnvironment::config().getString("window begin"));
+    util::DateTime end(::test::TestEnvironment::config().getString("window end"));
+
     std::vector<eckit::LocalConfiguration> conf;
     ::test::TestEnvironment::config().get("observations", conf);
 
     for (std::size_t jj = 0; jj < conf.size(); ++jj) {
       eckit::LocalConfiguration obsconf(conf[jj], "obs space");
-      boost::shared_ptr<ioda::ObsSpace> tmp(new ioda::ObsSpace(obsconf, oops::mpi::world(),
-                                                               timeWindow, oops::mpi::myself()));
+      ioda::ObsTopLevelParameters obsparams;
+      obsparams.validateAndDeserialize(obsconf);
+      boost::shared_ptr<ioda::ObsSpace> tmp(new ioda::ObsSpace(obsparams, oops::mpi::world(),
+                                                               bgn, end, oops::mpi::myself()));
       ospaces_.push_back(tmp);
     }
   }
@@ -89,40 +92,36 @@ void testConstructor() {
 
     const ObsSpace &odb = Test_::obspace(jj);
 
-    // Get the global numbers of locations and vars from the ObsSpace object
-    // These values are not expected to change whether running with a single process
-    // or multiple MPI tasks. There are other tests that check local stats according to
-    // the MPI distribution.
+    // Get the number of locations (nlocs) from the ObsSpace object
     std::size_t GlobalNlocs = odb.globalNumLocs();
-    std::size_t GlobalNlocsOutsideTimeWindow = odb.globalNumLocsOutsideTimeWindow();
+    std::size_t Nlocs = odb.nlocs();
+    std::size_t Nvars = odb.nvars();
     bool ObsAreSorted = odb.obsAreSorted();
 
     // Get the expected nlocs from the obspace object's configuration
-    std::size_t ExpectedGlobalNlocs = testConfig.getUnsigned("gnlocs");
-    std::size_t ExpectedGlobalNlocsOutsideTimeWindow =
-        testConfig.getUnsigned("gnlocs outside time window");
+    std::size_t ExpectedGlobalNlocs = testConfig.getUnsigned("nlocs");
+    std::size_t ExpectedNvars = testConfig.getUnsigned("nvars");
     bool ExpectedObsAreSorted = testConfig.getBool("obs are sorted");
 
     oops::Log::debug() << "GlobalNlocs, ExpectedGlobalNlocs: " << GlobalNlocs << ", "
                        << ExpectedGlobalNlocs << std::endl;
-    oops::Log::debug() << "GlobalNlocsOutsideTimeWindow, ExpectedGlobalNlocsOutsideTimeWindow: "
-                       << GlobalNlocsOutsideTimeWindow << ", "
-                       << ExpectedGlobalNlocsOutsideTimeWindow << std::endl;
+    oops::Log::debug() << "Nvars, ExpectedNvars: " << Nvars << ", "
+                       << ExpectedNvars << std::endl;
     oops::Log::debug() << "ObsAreSorted, ExpectedObsAreSorted: " << ObsAreSorted << ", "
                        << ExpectedObsAreSorted << std::endl;
 
     EXPECT(GlobalNlocs == ExpectedGlobalNlocs);
-    EXPECT(GlobalNlocsOutsideTimeWindow == ExpectedGlobalNlocsOutsideTimeWindow);
+    if (Nlocs > 0)
+      EXPECT(Nvars == ExpectedNvars);
     EXPECT(ObsAreSorted == ExpectedObsAreSorted);
 
     // records are ambigious and not implemented for halo distribution
     if (odb.distribution()->name() != "Halo") {
-      std::size_t Nlocs = odb.nlocs();
       std::size_t Nrecs = 0;
       std::set<std::size_t> recIndices;
       auto accumulator = odb.distribution()->createAccumulator<std::size_t>();
       for (std::size_t loc = 0; loc < Nlocs; ++loc) {
-        if (recIndices.insert(odb.recnum()[loc]).second) {
+        if (bool isNewRecord = recIndices.insert(odb.recnum()[loc]).second) {
           accumulator->addTerm(loc, 1);
           ++Nrecs;
         }

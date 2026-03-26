@@ -8,6 +8,3 @@ variables:
 # bitfield member variables
 - name: level.surface
 - name: level.max_wind_level
-- name: ops_obsgroup
-- name: varno
-- name: seqno

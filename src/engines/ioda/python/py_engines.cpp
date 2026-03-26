@@ -21,16 +21,9 @@
 #include "ioda/Layout.h"
 #include "ioda/Misc/DimensionScales.h"
 #include "ioda/ObsGroup.h"
-#include "ioda/config.h"
 
 namespace py = pybind11;
 using namespace ioda;
-
-
-#if bufr_query_FOUND
-void setupBufrIodaEncoder(py::module& m);
-#endif
-
 
 void setupEngines(pybind11::module& m) {
   using namespace ioda::Engines;
@@ -69,9 +62,7 @@ void setupEngines(pybind11::module& m) {
     py::arg("compat_range") = ioda::Engines::HH::defaultVersionRange());
   mEnginesHH.def(
     "createMemoryFile", ioda::Engines::HH::createMemoryFile, "Creates a ioda file in memory.",
-    py::arg("name") = "",
-    py::arg("mode") = ioda::Engines::BackendCreateModes::Truncate_If_Exists,
-    py::arg("flush_on_close") = false,
+    py::arg("name") = "", py::arg("mode"), py::arg("flush_on_close") = false,
     py::arg("increment_len_bytes") = 1000000,
     py::arg("compat_range") = ioda::Engines::HH::defaultVersionRange());
 
@@ -79,8 +70,4 @@ void setupEngines(pybind11::module& m) {
   mEnginesObsStore.doc() = "Default in-memory engine. MPI capable.";
   mEnginesObsStore.def("createRootGroup", ioda::Engines::ObsStore::createRootGroup,
                        "Create a new ObsStore-backed group.");
-
-#if bufr_query_FOUND
-  setupBufrIodaEncoder(mEngines);
-#endif
 }

@@ -63,9 +63,9 @@ AtlasDistribution::RecordAssigner::RecordAssigner(const Parameters_ & params)
   atlas::MeshGenerator generator(atlasConfig);
 
   mesh_ = generator.generate(grid);
-  if (static_cast<size_t>(mesh_.nb_parts()) != atlas::mpi::comm().size()) {
+  if (mesh_->nb_partitions() != atlas::mpi::comm().size()) {
     std::stringstream msg;
-    msg << "The number of mesh partitions, " << mesh_.nb_parts()
+    msg << "The number of mesh partitions, " << mesh_->nb_partitions()
         << ", is different from the number of MPI processes, " << atlas::mpi::comm().size();
     throw eckit::Exception(msg.str(), Here());
   }
@@ -97,7 +97,7 @@ bool AtlasDistribution::RecordAssigner::isInMyDomain(const eckit::geometry::Poin
   const atlas::idx_t partition = (*locator_)(point);
   oops::Log::debug() << "RecordAssigner::isInMyDomain(): Polygon locator says "
                      << point << " is in domain " << partition << std::endl;
-  return (static_cast<size_t>(partition) == atlas::mpi::comm().rank());
+  return partition == atlas::mpi::comm().rank();
 }
 
 // -----------------------------------------------------------------------------

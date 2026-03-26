@@ -34,7 +34,7 @@ TEST(test_obsspace_construct)
   use fckit_module
   use datetime_mod
   use obsspace_mod
-  use obs_variables_mod
+  use oops_variables_mod
   use, intrinsic :: iso_c_binding
   implicit none
 
@@ -43,21 +43,28 @@ TEST(test_obsspace_construct)
   type(fckit_configuration), allocatable :: obsconfigs(:)
   type(fckit_configuration) :: obsconfig
   type(fckit_configuration) :: testconfig
-  type(fckit_configuration) :: timewinconfig
+
+  character(kind=c_char,len=:), allocatable :: winbgnstr
+  character(kind=c_char,len=:), allocatable :: winendstr
+  type(datetime) :: winbgn, winend
 
   type(c_ptr), allocatable, dimension(:) :: obsspace
-  integer :: nlocs, nlocs_ref, location_id
-  integer :: nvars_ref
+  integer :: nlocs, nlocs_ref, nlocs_id
+  integer :: nvars, nvars_ref
   integer :: iobstype
   character(len=100) :: obsname
   character(kind=c_char,len=:), allocatable :: obsname_ref
-  type(obs_variables) :: vars
+  type(oops_variables) :: vars
 
   !> initialize winbgn, winend, get config
   call fckit_resource("--config", "", filename)
   config = fckit_YAMLConfiguration(fckit_pathname(filename))
 
-  call config%get_or_die("time window", timewinconfig)
+  call config%get_or_die("window begin", winbgnstr)
+  call config%get_or_die("window end", winendstr)
+
+  call datetime_create(winbgnstr, winbgn)
+  call datetime_create(winendstr, winend)
 
   !> allocate all ObsSpaces
   call config%get_or_die("observations", obsconfigs)
@@ -68,18 +75,21 @@ TEST(test_obsspace_construct)
     call obsconfigs(iobstype)%get_or_die("test data", testconfig)
 
     !> construct obsspace
-    obsspace(iobstype) = obsspace_construct(obsconfig, timewinconfig)
+    obsspace(iobstype) = obsspace_construct(obsconfig, winbgn, winend)
     call obsspace_obsname(obsspace(iobstype), obsname)
 
     !> test if obsname is the same as reference
     call obsconfig%get_or_die("name", obsname_ref)
     CHECK_EQUAL(obsname, obsname_ref)
 
-    !> test if nlocs and nlocs are the same as reference
-    location_id = obsspace_get_dim_id(obsspace(iobstype), "Location")
-    nlocs = obsspace_get_dim_size(obsspace(iobstype), location_id)
+    !> test if nlocs and nvars are the same as reference
+    nlocs_id = obsspace_get_dim_id(obsspace(iobstype), "nlocs")
+    nlocs = obsspace_get_dim_size(obsspace(iobstype), nlocs_id)
+    nvars = obsspace_get_nvars(obsspace(iobstype))
     call testconfig%get_or_die("nlocs", nlocs_ref)
+    call testconfig%get_or_die("nvars", nvars_ref)
     CHECK_EQUAL(nlocs, nlocs_ref)
+    CHECK_EQUAL(nvars,  nvars_ref)
 
     !> test if obsvariables nvars is the same
     vars = obsspace_obsvariables(obsspace(iobstype))
@@ -102,7 +112,7 @@ TEST(test_obsspace_get_db_put_db)
   use fckit_module
   use datetime_mod
   use obsspace_mod
-  use obs_variables_mod
+  use oops_variables_mod
   use, intrinsic :: iso_c_binding
   implicit none
 
@@ -110,15 +120,15 @@ TEST(test_obsspace_get_db_put_db)
   type(fckit_configuration) :: config
   type(fckit_configuration), allocatable :: obsconfigs(:)
   type(fckit_configuration) :: obsconfig
-  type(fckit_configuration) :: timewinconfig
 
   character(kind=c_char,len=:), allocatable :: winbgnstr
   character(kind=c_char,len=:), allocatable :: winendstr
+  type(datetime) :: winbgn, winend
   character(len=20) :: winbgnreadstr, winendreadstr
   type(datetime) :: winbgnread, winendread
 
   type(c_ptr), allocatable, dimension(:) :: obsspace
-  integer :: nlocs, location_id
+  integer :: nlocs, nlocs_id
   integer :: iobstype, iloc
 
   integer(c_int32_t), allocatable :: input_int32_var(:),  output_int32_var(:)
@@ -127,14 +137,15 @@ TEST(test_obsspace_get_db_put_db)
   real(c_double),     allocatable :: input_double_var(:), output_double_var(:)
   logical(c_bool),    allocatable :: input_bool_var(:),   output_bool_var(:)
 
-  !> get config
+  !> initialize winbgn, winend, get config
   call fckit_resource("--config", "", filename)
   config = fckit_YAMLConfiguration(fckit_pathname(filename))
 
-  call config%get_or_die("time window", timewinconfig)
+  call config%get_or_die("window begin", winbgnstr)
+  call config%get_or_die("window end", winendstr)
 
-  call timewinconfig%get_or_die("begin", winbgnstr)
-  call timewinconfig%get_or_die("end", winendstr)
+  call datetime_create(winbgnstr, winbgn)
+  call datetime_create(winendstr, winend)
 
   !> allocate all ObsSpaces
   call config%get_or_die("observations", obsconfigs)
@@ -144,10 +155,10 @@ TEST(test_obsspace_get_db_put_db)
     call obsconfigs(iobstype)%get_or_die("obs space", obsconfig)
 
     !> construct obsspace
-    obsspace(iobstype) = obsspace_construct(obsconfig, timewinconfig)
+    obsspace(iobstype) = obsspace_construct(obsconfig, winbgn, winend)
 
-    location_id = obsspace_get_dim_id(obsspace(iobstype), "Location")
-    nlocs = obsspace_get_dim_size(obsspace(iobstype), location_id)
+    nlocs_id = obsspace_get_dim_id(obsspace(iobstype), "nlocs")
+    nlocs = obsspace_get_dim_size(obsspace(iobstype), nlocs_id)
 
     !> test putting and getting a 32-bit int variable
     allocate(input_int32_var(nlocs), output_int32_var(nlocs))

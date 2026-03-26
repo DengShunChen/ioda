@@ -12,7 +12,7 @@
 import datetime
 import sys
 
-from pyioda import ioda
+import ioda
 import numpy as np
 
 f = ioda.Engines.HH.createFile(
